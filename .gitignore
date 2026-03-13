@@ -32,6 +32,7 @@ yarn-error.log*
 
 # local automation artifacts
 .playwright-cli/
+kids-projects-dashboard.json
 
 # env files (can opt-in for committing if needed)
 .env*

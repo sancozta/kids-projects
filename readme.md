@@ -1,12 +1,12 @@
 # Kids Projects
 
-## Visao Geral
+### Visao Geral
 
 Kids Projects e um painel visual para organizar varios projetos em uma unica tela, com foco em velocidade operacional, leitura rapida e acompanhamento diario.
 
 Cada projeto vive em um card proprio com checklist editavel, progresso visivel e persistencia local. O produto foi desenhado para funcionar como um cockpit compacto de execucao, sem desperdiçar area util da tela.
 
-## Proposta de Valor
+### Proposta de Valor
 
 O painel foi pensado para quem precisa enxergar muitos projetos ao mesmo tempo e transformar ideias em proximos passos claros.
 
@@ -19,7 +19,7 @@ Principais ganhos:
 - base pronta para futura sincronizacao com backend ou nuvem
 - temas visuais para diferentes contextos de uso
 
-## O Produto
+### O Produto
 
 O dashboard ocupa a tela inteira e mantem alta densidade de informacao.
 
@@ -34,7 +34,7 @@ Funcionalidades atuais:
 - temas `light`, `dark` e `blue`
 - opcao de aumentar a fonte dos titulos dos projetos
 
-## Estrutura dos Dados
+### Estrutura dos Dados
 
 O estado do painel e salvo de forma estruturada, o que facilita backup, importacao futura e sincronizacao com servicos externos.
 
@@ -62,7 +62,7 @@ Exemplo:
 }
 ```
 
-## Stack
+### Stack
 
 - Next.js 16
 - React 19
@@ -71,7 +71,7 @@ Exemplo:
 - Framer Motion
 - Lucide React
 
-## Como Rodar
+### Como Rodar
 
 Instale as dependencias:
 
@@ -91,7 +91,7 @@ Abra no navegador:
 http://localhost:3002
 ```
 
-## Scripts
+### Scripts
 
 ```bash
 npm run dev
@@ -100,7 +100,7 @@ npm run start
 npm run lint
 ```
 
-## Organizacao do Codigo
+### Organizacao do Codigo
 
 - `app/page.tsx`: tela principal, interacoes e fluxo do dashboard
 - `app/dashboard-state.ts`: tipos, estado inicial, parse e persistencia estruturada
@@ -108,7 +108,7 @@ npm run lint
 - `app/layout.tsx`: shell raiz, metadata e fonts
 - `AGENTS.md`: contexto de projeto para agentes e IAs
 
-## Posicionamento
+### Posicionamento
 
 Este projeto nao e apenas um checklist em grade. Ele serve como uma base de produto para um painel de projetos que pode evoluir para:
 
@@ -119,7 +119,7 @@ Este projeto nao e apenas um checklist em grade. Ele serve como uma base de prod
 - templates de projetos
 - integracoes com ferramentas externas
 
-## Cuidados de Repositorio
+### Cuidados de Repositorio
 
 O repositório esta configurado para nao versionar artefatos locais e sensiveis, como:
 

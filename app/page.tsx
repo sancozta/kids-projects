@@ -402,7 +402,15 @@ export default function Home() {
                               <button
                                 type="button"
                                 onClick={() => startEditing(item.id, item.text)}
-                                className={item.done ? "task-item is-done" : "task-item"}
+                                className={
+                                  item.done
+                                    ? projectTitleSize === "large"
+                                      ? "task-item task-item-large is-done"
+                                      : "task-item is-done"
+                                    : projectTitleSize === "large"
+                                      ? "task-item task-item-large"
+                                      : "task-item"
+                                }
                               >
                                 <span>{item.text}</span>
                               </button>
@@ -447,7 +455,11 @@ export default function Home() {
                                 }
                               }}
                               placeholder="Novo item"
-                              className="task-edit-input"
+                              className={
+                                projectTitleSize === "large"
+                                  ? "task-edit-input task-edit-input-large"
+                                  : "task-edit-input"
+                              }
                             />
                           </motion.li>
                         ) : null}

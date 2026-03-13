@@ -293,6 +293,10 @@ button {
     background-color 180ms ease;
 }
 
+.task-item-large {
+  font-size: 12px;
+}
+
 .task-row {
   display: flex;
   align-items: center;
@@ -366,6 +370,10 @@ button {
   line-height: 1.1;
   outline: none;
   box-shadow: none;
+}
+
+.task-edit-input-large {
+  font-size: 12px;
 }
 
 ::-webkit-scrollbar {

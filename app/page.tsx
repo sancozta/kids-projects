@@ -2,7 +2,16 @@
 
 import { startTransition, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, Circle, Download, MoonStar, SunMedium, Type, Waves } from "lucide-react";
+import {
+  CheckCircle2,
+  Circle,
+  Download,
+  MoonStar,
+  SunMedium,
+  Trash2,
+  Type,
+  Waves,
+} from "lucide-react";
 import {
   buildDashboardState,
   createInitialDashboardState,
@@ -83,6 +92,23 @@ export default function Home() {
             },
       ),
     );
+  }
+
+  function deleteTodo(projectId: string, itemId: string) {
+    setProjects((current) =>
+      current.map((project) =>
+        project.id !== projectId
+          ? project
+          : {
+              ...project,
+              items: project.items.filter((item) => item.id !== itemId),
+            },
+      ),
+    );
+
+    if (editingItemId === itemId) {
+      cancelEditing();
+    }
   }
 
   function addTodo(projectId: string) {
@@ -399,21 +425,31 @@ export default function Home() {
                                 className="task-edit-input"
                               />
                             ) : (
-                              <button
-                                type="button"
-                                onClick={() => startEditing(item.id, item.text)}
-                                className={
-                                  item.done
-                                    ? projectTitleSize === "large"
-                                      ? "task-item task-item-large is-done"
-                                      : "task-item is-done"
-                                    : projectTitleSize === "large"
-                                      ? "task-item task-item-large"
-                                      : "task-item"
-                                }
-                              >
-                                <span>{item.text}</span>
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => startEditing(item.id, item.text)}
+                                  className={
+                                    item.done
+                                      ? projectTitleSize === "large"
+                                        ? "task-item task-item-large is-done"
+                                        : "task-item is-done"
+                                      : projectTitleSize === "large"
+                                        ? "task-item task-item-large"
+                                        : "task-item"
+                                  }
+                                >
+                                  <span>{item.text}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteTodo(project.id, item.id)}
+                                  className="task-delete"
+                                  aria-label="Excluir item"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </>
                             )}
                           </motion.li>
                         ))}

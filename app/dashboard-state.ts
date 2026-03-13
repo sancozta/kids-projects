@@ -103,7 +103,7 @@ export function createInitialDashboardState(): DashboardState {
     version: 1,
     updatedAt: new Date().toISOString(),
     theme: "dark",
-    projectTitleSize: "normal",
+    projectTitleSize: "large",
     projects: initialProjects,
   };
 }
@@ -128,7 +128,7 @@ export function parseDashboardState(value: string | null): DashboardState {
       updatedAt: parsed.updatedAt,
       theme: parsed.theme,
       projectTitleSize:
-        parsed.projectTitleSize === "large" ? "large" : "normal",
+        parsed.projectTitleSize === "normal" ? "normal" : "large",
       projects: parsed.projects,
     };
   } catch {

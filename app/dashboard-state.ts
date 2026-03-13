@@ -1,4 +1,5 @@
 export type ThemeMode = "light" | "dark" | "blue";
+export type ProjectTitleSize = "normal" | "large";
 
 export type TodoItem = {
   id: string;
@@ -16,6 +17,7 @@ export type DashboardState = {
   version: 1;
   updatedAt: string;
   theme: ThemeMode;
+  projectTitleSize: ProjectTitleSize;
   projects: ProjectCard[];
 };
 
@@ -101,6 +103,7 @@ export function createInitialDashboardState(): DashboardState {
     version: 1,
     updatedAt: new Date().toISOString(),
     theme: "dark",
+    projectTitleSize: "normal",
     projects: initialProjects,
   };
 }
@@ -124,6 +127,8 @@ export function parseDashboardState(value: string | null): DashboardState {
       version: 1,
       updatedAt: parsed.updatedAt,
       theme: parsed.theme,
+      projectTitleSize:
+        parsed.projectTitleSize === "large" ? "large" : "normal",
       projects: parsed.projects,
     };
   } catch {
@@ -133,12 +138,103 @@ export function parseDashboardState(value: string | null): DashboardState {
 
 export function buildDashboardState(
   theme: ThemeMode,
+  projectTitleSize: ProjectTitleSize,
   projects: ProjectCard[],
 ): DashboardState {
   return {
     version: 1,
     updatedAt: new Date().toISOString(),
     theme,
+    projectTitleSize,
     projects,
   };
+}
+
+const localProjectSuggestions: Array<{
+  match: string[];
+  items: string[];
+}> = [
+  {
+    match: ["kids-projects", "kids projects", "dashboard"],
+    items: [
+      "Criar sincronizacao com backend para salvar o json na nuvem",
+      "Adicionar ordenacao manual dos cards e itens",
+      "Permitir importar json salvo para restaurar o painel",
+    ],
+  },
+  {
+    match: ["kids-architect", "hunt architect", "architect"],
+    items: [
+      "Melhorar a heuristica de leitura da planta 2D para paredes",
+      "Salvar e recarregar plantas importadas no editor",
+      "Validar performance do viewer 3D e dos gestos em sessao longa",
+    ],
+  },
+  {
+    match: ["kids-envboard", "envboard"],
+    items: [
+      "Criar backup e restore da store ~/.envboard/vars.json",
+      "Adicionar diff antes de aplicar alteracoes no zshrc e launchd",
+      "Cobrir com testes os fluxos de salvar, excluir e sincronizar envs",
+    ],
+  },
+  {
+    match: ["cnpj-hosting", "cnpj hosting"],
+    items: [
+      "Revisar pipeline de deploy firebase e credenciais do projeto",
+      "Atualizar textos e projetos exibidos na home portfolio",
+      "Validar build production e corrigir assets pesados antigos",
+    ],
+  },
+  {
+    match: ["pscc-hosting", "pscc hosting", "pscc"],
+    items: [
+      "Revisar o white-label e consolidar configuracoes por cliente",
+      "Organizar a pasta jobs e definir o que deve virar asset publico",
+      "Validar deploy firebase e consistencia de i18n nas paginas",
+    ],
+  },
+  {
+    match: ["legacy", "acervo legacy"],
+    items: [
+      "Catalogar os arquivos zip por cliente, stack e dominio",
+      "Criar um indice resumido com prioridade de migracao",
+      "Separar projetos reaproveitaveis dos arquivos apenas historicos",
+    ],
+  },
+];
+
+function normalizeTitle(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export function mergeLocalProjectSuggestions(projects: ProjectCard[]): ProjectCard[] {
+  return projects.map((project) => {
+    const normalizedTitle = normalizeTitle(project.title);
+    const suggestion = localProjectSuggestions.find(({ match }) =>
+      match.some((pattern) => normalizedTitle.includes(pattern)),
+    );
+
+    if (!suggestion) {
+      return project;
+    }
+
+    const existingTexts = new Set(project.items.map((item) => normalizeTitle(item.text)));
+    const newItems = suggestion.items
+      .filter((text) => !existingTexts.has(normalizeTitle(text)))
+      .map((text, index) => ({
+        id: `${project.id}-suggested-${index + 1}`,
+        text,
+        done: false,
+      }));
+
+    if (!newItems.length) {
+      return project;
+    }
+
+    return {
+      ...project,
+      items: [...project.items, ...newItems],
+    };
+  });
 }

@@ -227,6 +227,10 @@ button {
   text-align: left;
 }
 
+.title-edit-button-large {
+  font-size: 14px;
+}
+
 .title-edit-button:hover {
   border-color: var(--border-color);
   background: color-mix(in srgb, var(--panel-highlight) 34%, transparent);
@@ -247,6 +251,10 @@ button {
   line-height: 1;
   outline: none;
   box-shadow: none;
+}
+
+.title-edit-input-large {
+  font-size: 14px;
 }
 
 .task-input:focus {

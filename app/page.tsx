@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, Circle, Download, MoonStar, SunMedium, Waves } from "lucide-react";
+import { CheckCircle2, Circle, Download, MoonStar, SunMedium, Type, Waves } from "lucide-react";
 import {
   buildDashboardState,
   createInitialDashboardState,
   dashboardStorageKey,
+  mergeLocalProjectSuggestions,
   parseDashboardState,
   ProjectCard,
+  ProjectTitleSize,
   ThemeMode,
 } from "./dashboard-state";
 
@@ -23,28 +25,44 @@ const themes: {
 ];
 
 export default function Home() {
-  const [theme, setTheme] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") return "dark";
-    return parseDashboardState(window.localStorage.getItem(dashboardStorageKey)).theme;
-  });
-  const [projects, setProjects] = useState<ProjectCard[]>(() => {
-    if (typeof window === "undefined") return createInitialDashboardState().projects;
-    return parseDashboardState(window.localStorage.getItem(dashboardStorageKey)).projects;
-  });
+  const initialState = createInitialDashboardState();
+  const [theme, setTheme] = useState<ThemeMode>(initialState.theme);
+  const [projectTitleSize, setProjectTitleSize] = useState<ProjectTitleSize>(
+    initialState.projectTitleSize,
+  );
+  const [projects, setProjects] = useState<ProjectCard[]>(initialState.projects);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectTitle, setEditingProjectTitle] = useState("");
   const [creatingProjectId, setCreatingProjectId] = useState<string | null>(null);
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  useEffect(() => {
+    const savedState = parseDashboardState(window.localStorage.getItem(dashboardStorageKey));
+    const enrichedProjects = mergeLocalProjectSuggestions(savedState.projects);
+
+    startTransition(() => {
+      setTheme(savedState.theme);
+      setProjectTitleSize(savedState.projectTitleSize);
+      setProjects(enrichedProjects);
+      setHasHydrated(true);
+    });
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+
     window.localStorage.setItem(
       dashboardStorageKey,
-      JSON.stringify(buildDashboardState(theme, projects)),
+      JSON.stringify(buildDashboardState(theme, projectTitleSize, projects)),
     );
-  }, [theme, projects]);
+  }, [hasHydrated, theme, projectTitleSize, projects]);
 
   const totalItems = projects.reduce((acc, project) => acc + project.items.length, 0);
   const completedItems = projects.reduce(
@@ -175,7 +193,11 @@ export default function Home() {
   }
 
   function exportDashboardJson() {
-    const json = JSON.stringify(buildDashboardState(theme, projects), null, 2);
+    const json = JSON.stringify(
+      buildDashboardState(theme, projectTitleSize, projects),
+      null,
+      2,
+    );
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -214,6 +236,19 @@ export default function Home() {
               aria-label="Exportar JSON do dashboard"
             >
               <Download className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setProjectTitleSize((current) =>
+                  current === "normal" ? "large" : "normal",
+                )
+              }
+              className={projectTitleSize === "large" ? "theme-button active" : "theme-button"}
+              aria-label="Alternar tamanho da fonte dos projetos"
+            >
+              <Type className="h-4 w-4" />
             </button>
 
             <div className="theme-switcher">
@@ -268,13 +303,21 @@ export default function Home() {
                             cancelProjectEditing();
                           }
                         }}
-                        className="title-edit-input"
+                        className={
+                          projectTitleSize === "large"
+                            ? "title-edit-input title-edit-input-large"
+                            : "title-edit-input"
+                        }
                       />
                     ) : (
                       <button
                         type="button"
                         onClick={() => startEditingProject(project.id, project.title)}
-                        className="title-edit-button"
+                        className={
+                          projectTitleSize === "large"
+                            ? "title-edit-button title-edit-button-large"
+                            : "title-edit-button"
+                        }
                       >
                         {project.title}
                       </button>

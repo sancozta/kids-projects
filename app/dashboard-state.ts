@@ -18,6 +18,8 @@ export type DashboardState = {
   updatedAt: string;
   theme: ThemeMode;
   projectTitleSize: ProjectTitleSize;
+  privacyMode: boolean;
+  hideCompletedItems: boolean;
   projects: ProjectCard[];
 };
 
@@ -98,12 +100,113 @@ export const initialProjects: ProjectCard[] = [
   },
 ];
 
+export const fakeProjects: ProjectCard[] = [
+  {
+    id: "f1",
+    title: "Projeto Atlas",
+    items: [
+      { id: "f1-1", text: "Consolidar requisitos da sprint", done: true },
+      { id: "f1-2", text: "Fechar wireframe da home", done: false },
+      { id: "f1-3", text: "Validar escopo com time interno", done: false },
+      { id: "f1-4", text: "Ajustar copy da proposta comercial", done: true },
+      { id: "f1-5", text: "Preparar apresentacao para decisores", done: false },
+      { id: "f1-6", text: "Revisar fluxo principal do onboarding", done: false },
+    ],
+  },
+  {
+    id: "f2",
+    title: "Operacao Boreal",
+    items: [
+      { id: "f2-1", text: "Organizar backlog de automacoes", done: true },
+      { id: "f2-2", text: "Revisar prioridades do mes", done: false },
+      { id: "f2-3", text: "Documentar fluxo principal", done: false },
+      { id: "f2-4", text: "Definir SLA das rotinas operacionais", done: false },
+      { id: "f2-5", text: "Consolidar indicadores da semana", done: true },
+      { id: "f2-6", text: "Padronizar checklist de execucao", done: false },
+    ],
+  },
+  {
+    id: "f3",
+    title: "Studio Nimbus",
+    items: [
+      { id: "f3-1", text: "Aprovar conceito visual", done: true },
+      { id: "f3-2", text: "Ajustar textos da landing", done: false },
+      { id: "f3-3", text: "Separar referencia de campanha", done: false },
+      { id: "f3-4", text: "Montar versao inicial do media kit", done: false },
+      { id: "f3-5", text: "Validar grid visual do feed", done: true },
+      { id: "f3-6", text: "Planejar pauta das proximas pecas", done: false },
+    ],
+  },
+  {
+    id: "f4",
+    title: "Core Delta",
+    items: [
+      { id: "f4-1", text: "Definir plano de deploy", done: false },
+      { id: "f4-2", text: "Criar checklist de homologacao", done: false },
+      { id: "f4-3", text: "Mapear riscos tecnicos", done: false },
+      { id: "f4-4", text: "Revisar estrutura dos ambientes", done: true },
+      { id: "f4-5", text: "Catalogar dependencias criticas", done: false },
+      { id: "f4-6", text: "Fechar plano de rollback", done: false },
+    ],
+  },
+  {
+    id: "f5",
+    title: "Lab Aurora",
+    items: [
+      { id: "f5-1", text: "Refinar experiencia inicial", done: true },
+      { id: "f5-2", text: "Padronizar componentes base", done: true },
+      { id: "f5-3", text: "Planejar iteracao seguinte", done: false },
+      { id: "f5-4", text: "Ajustar navegacao entre modulos", done: false },
+      { id: "f5-5", text: "Testar legibilidade em telas pequenas", done: false },
+      { id: "f5-6", text: "Revisar contraste e estados interativos", done: true },
+    ],
+  },
+  {
+    id: "f6",
+    title: "Hub Prisma",
+    items: [
+      { id: "f6-1", text: "Conferir integracoes externas", done: false },
+      { id: "f6-2", text: "Atualizar relatorio executivo", done: false },
+      { id: "f6-3", text: "Preparar reuniao semanal", done: false },
+      { id: "f6-4", text: "Mapear pendencias entre squads", done: true },
+      { id: "f6-5", text: "Consolidar status das entregas", done: false },
+      { id: "f6-6", text: "Definir pauta do comite interno", done: false },
+    ],
+  },
+  {
+    id: "f7",
+    title: "Sprint Vertex",
+    items: [
+      { id: "f7-1", text: "Revisar dependencias abertas", done: true },
+      { id: "f7-2", text: "Quebrar entregas por modulo", done: false },
+      { id: "f7-3", text: "Fechar estimativas finais", done: false },
+      { id: "f7-4", text: "Atualizar roadmap da sprint", done: false },
+      { id: "f7-5", text: "Confirmar capacidade do time", done: true },
+      { id: "f7-6", text: "Ajustar criterio de pronto", done: false },
+    ],
+  },
+  {
+    id: "f8",
+    title: "Console Orbit",
+    items: [
+      { id: "f8-1", text: "Organizar base de conhecimento", done: false },
+      { id: "f8-2", text: "Revisar respostas padrao", done: false },
+      { id: "f8-3", text: "Mapear melhorias operacionais", done: false },
+      { id: "f8-4", text: "Atualizar macros de atendimento", done: true },
+      { id: "f8-5", text: "Separar top 10 duvidas recorrentes", done: false },
+      { id: "f8-6", text: "Padronizar fluxo de escalonamento", done: false },
+    ],
+  },
+];
+
 export function createInitialDashboardState(): DashboardState {
   return {
     version: 1,
     updatedAt: new Date().toISOString(),
     theme: "dark",
     projectTitleSize: "large",
+    privacyMode: false,
+    hideCompletedItems: false,
     projects: initialProjects,
   };
 }
@@ -129,6 +232,8 @@ export function parseDashboardState(value: string | null): DashboardState {
       theme: parsed.theme,
       projectTitleSize:
         parsed.projectTitleSize === "normal" ? "normal" : "large",
+      privacyMode: parsed.privacyMode === true,
+      hideCompletedItems: parsed.hideCompletedItems === true,
       projects: parsed.projects,
     };
   } catch {
@@ -139,6 +244,8 @@ export function parseDashboardState(value: string | null): DashboardState {
 export function buildDashboardState(
   theme: ThemeMode,
   projectTitleSize: ProjectTitleSize,
+  privacyMode: boolean,
+  hideCompletedItems: boolean,
   projects: ProjectCard[],
 ): DashboardState {
   return {
@@ -146,6 +253,8 @@ export function buildDashboardState(
     updatedAt: new Date().toISOString(),
     theme,
     projectTitleSize,
+    privacyMode,
+    hideCompletedItems,
     projects,
   };
 }

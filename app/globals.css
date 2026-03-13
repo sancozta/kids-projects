@@ -208,10 +208,20 @@ button {
   color: var(--text-muted);
 }
 
+.title-slot {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+}
+
 .title-edit-button {
+  display: block;
+  flex: 1 1 auto;
+  width: auto;
   min-width: 0;
   max-width: 100%;
-  display: block;
+  min-height: 18px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -237,9 +247,12 @@ button {
 }
 
 .title-edit-input {
-  min-width: 0;
   display: block;
-  width: 100%;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 18px;
+  margin: 0;
   box-sizing: border-box;
   border: 1px solid transparent;
   border-radius: 5px;
@@ -249,6 +262,8 @@ button {
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
+  font-family: inherit;
+  appearance: none;
   outline: none;
   box-shadow: none;
 }

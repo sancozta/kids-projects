@@ -23,6 +23,8 @@ Principais ganhos:
 
 O dashboard ocupa a tela inteira e mantem alta densidade de informacao.
 
+![Preview do Kids Projects](./readme.png)
+
 Funcionalidades atuais:
 
 - grade fixa `4 x 2`

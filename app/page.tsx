@@ -6,6 +6,9 @@ import {
   CheckCircle2,
   Circle,
   Download,
+  Eye,
+  EyeOff,
+  Filter,
   MoonStar,
   SunMedium,
   Trash2,
@@ -16,6 +19,7 @@ import {
   buildDashboardState,
   createInitialDashboardState,
   dashboardStorageKey,
+  fakeProjects,
   mergeLocalProjectSuggestions,
   parseDashboardState,
   ProjectCard,
@@ -39,6 +43,10 @@ export default function Home() {
   const [projectTitleSize, setProjectTitleSize] = useState<ProjectTitleSize>(
     initialState.projectTitleSize,
   );
+  const [privacyMode, setPrivacyMode] = useState<boolean>(initialState.privacyMode);
+  const [hideCompletedItems, setHideCompletedItems] = useState<boolean>(
+    initialState.hideCompletedItems,
+  );
   const [projects, setProjects] = useState<ProjectCard[]>(initialState.projects);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -55,6 +63,8 @@ export default function Home() {
     startTransition(() => {
       setTheme(savedState.theme);
       setProjectTitleSize(savedState.projectTitleSize);
+      setPrivacyMode(savedState.privacyMode);
+      setHideCompletedItems(savedState.hideCompletedItems);
       setProjects(enrichedProjects);
       setHasHydrated(true);
     });
@@ -69,12 +79,22 @@ export default function Home() {
 
     window.localStorage.setItem(
       dashboardStorageKey,
-      JSON.stringify(buildDashboardState(theme, projectTitleSize, projects)),
+      JSON.stringify(
+        buildDashboardState(
+          theme,
+          projectTitleSize,
+          privacyMode,
+          hideCompletedItems,
+          projects,
+        ),
+      ),
     );
-  }, [hasHydrated, theme, projectTitleSize, projects]);
+  }, [hasHydrated, theme, projectTitleSize, privacyMode, hideCompletedItems, projects]);
 
-  const totalItems = projects.reduce((acc, project) => acc + project.items.length, 0);
-  const completedItems = projects.reduce(
+  const visibleProjects = privacyMode ? fakeProjects : projects;
+
+  const totalItems = visibleProjects.reduce((acc, project) => acc + project.items.length, 0);
+  const completedItems = visibleProjects.reduce(
     (acc, project) => acc + project.items.filter((item) => item.done).length,
     0,
   );
@@ -220,7 +240,13 @@ export default function Home() {
 
   function exportDashboardJson() {
     const json = JSON.stringify(
-      buildDashboardState(theme, projectTitleSize, projects),
+      buildDashboardState(
+        theme,
+        projectTitleSize,
+        privacyMode,
+        hideCompletedItems,
+        projects,
+      ),
       null,
       2,
     );
@@ -251,7 +277,7 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            <Metric label="Projetos" value={projects.length.toString().padStart(2, "0")} />
+            <Metric label="Projetos" value={visibleProjects.length.toString().padStart(2, "0")} />
             <Metric label="Itens" value={totalItems.toString().padStart(2, "0")} />
             <Metric label="Done" value={completedItems.toString().padStart(2, "0")} />
 
@@ -262,6 +288,24 @@ export default function Home() {
               aria-label="Exportar JSON do dashboard"
             >
               <Download className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPrivacyMode((current) => !current)}
+              className={privacyMode ? "theme-button active" : "theme-button"}
+              aria-label="Alternar modo com dados fake"
+            >
+              {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setHideCompletedItems((current) => !current)}
+              className={hideCompletedItems ? "theme-button active" : "theme-button"}
+              aria-label="Ocultar itens concluidos"
+            >
+              <Filter className="h-4 w-4" />
             </button>
 
             <button
@@ -295,9 +339,12 @@ export default function Home() {
         </header>
 
         <div className="grid h-[calc(100%-2.75rem-0.625rem)] grid-cols-4 grid-rows-2 gap-2">
-          {projects.map((project, index) => {
+          {visibleProjects.map((project, index) => {
             const doneCount = project.items.filter((item) => item.done).length;
             const progress = project.items.length ? (doneCount / project.items.length) * 100 : 0;
+            const visibleItems = hideCompletedItems
+              ? project.items.filter((item) => !item.done)
+              : project.items;
 
             return (
               <motion.article
@@ -312,42 +359,45 @@ export default function Home() {
                     <span className="rounded-[5px] border border-[var(--border-color)] px-1 py-0.5 font-mono text-[8px] uppercase tracking-[0.08em] text-[var(--text-muted)]">
                       {String(index + 1).padStart(2, "0")}
                     </span>
-                    {editingProjectId === project.id ? (
-                      <input
-                        value={editingProjectTitle}
-                        autoFocus
-                        onChange={(event) => setEditingProjectTitle(event.target.value)}
-                        onBlur={() => saveProjectTitle(project.id)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            saveProjectTitle(project.id);
-                          }
+                    <div className="title-slot">
+                      {editingProjectId === project.id ? (
+                        <input
+                          value={editingProjectTitle}
+                          autoFocus
+                          onChange={(event) => setEditingProjectTitle(event.target.value)}
+                          onBlur={() => saveProjectTitle(project.id)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              saveProjectTitle(project.id);
+                            }
 
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            cancelProjectEditing();
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              cancelProjectEditing();
+                            }
+                          }}
+                          className={
+                            projectTitleSize === "large"
+                              ? "title-edit-input title-edit-input-large"
+                              : "title-edit-input"
                           }
-                        }}
-                        className={
-                          projectTitleSize === "large"
-                            ? "title-edit-input title-edit-input-large"
-                            : "title-edit-input"
-                        }
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => startEditingProject(project.id, project.title)}
-                        className={
-                          projectTitleSize === "large"
-                            ? "title-edit-button title-edit-button-large"
-                            : "title-edit-button"
-                        }
-                      >
-                        {project.title}
-                      </button>
-                    )}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={privacyMode}
+                          onClick={() => startEditingProject(project.id, project.title)}
+                          className={
+                            projectTitleSize === "large"
+                              ? "title-edit-button title-edit-button-large"
+                              : "title-edit-button"
+                          }
+                        >
+                          {project.title}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="rounded-[5px] border border-[var(--border-strong)] px-2 py-0.5 font-mono text-[10px] text-[var(--text-secondary)]">
                     {doneCount}/{project.items.length}
@@ -369,6 +419,7 @@ export default function Home() {
                   <div
                     className="min-h-0 flex-1 overflow-auto pr-1"
                     onClick={(event) => {
+                      if (privacyMode) return;
                       if (event.target === event.currentTarget) {
                         startCreatingItem(project.id);
                       }
@@ -378,12 +429,13 @@ export default function Home() {
                       <ul
                         className="space-y-0.5"
                         onClick={(event) => {
+                          if (privacyMode) return;
                           if (event.target === event.currentTarget) {
                             startCreatingItem(project.id);
                           }
                         }}
                       >
-                        {project.items.map((item) => (
+                        {visibleItems.map((item) => (
                           <motion.li
                             key={item.id}
                             layout
@@ -394,6 +446,7 @@ export default function Home() {
                           >
                             <button
                               type="button"
+                              disabled={privacyMode}
                               onClick={() => toggleTodo(project.id, item.id)}
                               className="task-check"
                               aria-label={item.done ? "Marcar como nao concluido" : "Marcar como concluido"}
@@ -425,10 +478,8 @@ export default function Home() {
                                 className="task-edit-input"
                               />
                             ) : (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => startEditing(item.id, item.text)}
+                              privacyMode ? (
+                                <div
                                   className={
                                     item.done
                                       ? projectTitleSize === "large"
@@ -440,16 +491,34 @@ export default function Home() {
                                   }
                                 >
                                   <span>{item.text}</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => deleteTodo(project.id, item.id)}
-                                  className="task-delete"
-                                  aria-label="Excluir item"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </>
+                                </div>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditing(item.id, item.text)}
+                                    className={
+                                      item.done
+                                        ? projectTitleSize === "large"
+                                          ? "task-item task-item-large is-done"
+                                          : "task-item is-done"
+                                        : projectTitleSize === "large"
+                                          ? "task-item task-item-large"
+                                          : "task-item"
+                                    }
+                                  >
+                                    <span>{item.text}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteTodo(project.id, item.id)}
+                                    className="task-delete"
+                                    aria-label="Excluir item"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </>
+                              )
                             )}
                           </motion.li>
                         ))}

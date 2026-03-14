@@ -57,17 +57,53 @@ export default function Home() {
   const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
-    const savedState = parseDashboardState(window.localStorage.getItem(dashboardStorageKey));
-    const enrichedProjects = mergeLocalProjectSuggestions(savedState.projects);
+    let cancelled = false;
 
-    startTransition(() => {
-      setTheme(savedState.theme);
-      setProjectTitleSize(savedState.projectTitleSize);
-      setPrivacyMode(savedState.privacyMode);
-      setHideCompletedItems(savedState.hideCompletedItems);
-      setProjects(enrichedProjects);
-      setHasHydrated(true);
-    });
+    async function hydrateDashboard() {
+      const browserState = parseDashboardState(window.localStorage.getItem(dashboardStorageKey));
+
+      try {
+        const response = await fetch("/api/dashboard-state", { cache: "no-store" });
+        const fileState = response.ok
+          ? parseDashboardState(JSON.stringify(await response.json()))
+          : createInitialDashboardState();
+        const chosenState =
+          new Date(browserState.updatedAt).getTime() > new Date(fileState.updatedAt).getTime()
+            ? browserState
+            : fileState;
+        const enrichedProjects = mergeLocalProjectSuggestions(chosenState.projects);
+
+        if (cancelled) return;
+
+        startTransition(() => {
+          setTheme(chosenState.theme);
+          setProjectTitleSize(chosenState.projectTitleSize);
+          setPrivacyMode(chosenState.privacyMode);
+          setHideCompletedItems(chosenState.hideCompletedItems);
+          setProjects(enrichedProjects);
+          setHasHydrated(true);
+        });
+      } catch {
+        const enrichedProjects = mergeLocalProjectSuggestions(browserState.projects);
+
+        if (cancelled) return;
+
+        startTransition(() => {
+          setTheme(browserState.theme);
+          setProjectTitleSize(browserState.projectTitleSize);
+          setPrivacyMode(browserState.privacyMode);
+          setHideCompletedItems(browserState.hideCompletedItems);
+          setProjects(enrichedProjects);
+          setHasHydrated(true);
+        });
+      }
+    }
+
+    hydrateDashboard();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -77,18 +113,28 @@ export default function Home() {
   useEffect(() => {
     if (!hasHydrated) return;
 
-    window.localStorage.setItem(
-      dashboardStorageKey,
-      JSON.stringify(
-        buildDashboardState(
-          theme,
-          projectTitleSize,
-          privacyMode,
-          hideCompletedItems,
-          projects,
-        ),
-      ),
+    const state = buildDashboardState(
+      theme,
+      projectTitleSize,
+      privacyMode,
+      hideCompletedItems,
+      projects,
     );
+    const serializedState = JSON.stringify(state);
+
+    window.localStorage.setItem(dashboardStorageKey, serializedState);
+
+    const timeoutId = window.setTimeout(() => {
+      void fetch("/api/dashboard-state", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: serializedState,
+      });
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [hasHydrated, theme, projectTitleSize, privacyMode, hideCompletedItems, projects]);
 
   const visibleProjects = privacyMode ? fakeProjects : projects;
@@ -459,44 +505,34 @@ export default function Home() {
                             </button>
 
                             {editingItemId === item.id ? (
-                              <input
-                                value={editingText}
-                                autoFocus
-                                onChange={(event) => setEditingText(event.target.value)}
-                                onBlur={() => saveEditing(project.id, item.id)}
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter") {
-                                    event.preventDefault();
-                                    saveEditing(project.id, item.id);
-                                  }
+                              <div className="task-content-slot">
+                                <input
+                                  value={editingText}
+                                  autoFocus
+                                  onChange={(event) => setEditingText(event.target.value)}
+                                  onBlur={() => saveEditing(project.id, item.id)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                      event.preventDefault();
+                                      saveEditing(project.id, item.id);
+                                    }
 
-                                  if (event.key === "Escape") {
-                                    event.preventDefault();
-                                    cancelEditing();
+                                    if (event.key === "Escape") {
+                                      event.preventDefault();
+                                      cancelEditing();
+                                    }
+                                  }}
+                                  className={
+                                    projectTitleSize === "large"
+                                      ? "task-edit-input task-edit-input-large"
+                                      : "task-edit-input"
                                   }
-                                }}
-                                className="task-edit-input"
-                              />
+                                />
+                              </div>
                             ) : (
                               privacyMode ? (
-                                <div
-                                  className={
-                                    item.done
-                                      ? projectTitleSize === "large"
-                                        ? "task-item task-item-large is-done"
-                                        : "task-item is-done"
-                                      : projectTitleSize === "large"
-                                        ? "task-item task-item-large"
-                                        : "task-item"
-                                  }
-                                >
-                                  <span>{item.text}</span>
-                                </div>
-                              ) : (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => startEditing(item.id, item.text)}
+                                <div className="task-content-slot">
+                                  <div
                                     className={
                                       item.done
                                         ? projectTitleSize === "large"
@@ -508,7 +544,27 @@ export default function Home() {
                                     }
                                   >
                                     <span>{item.text}</span>
-                                  </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="task-content-slot">
+                                    <button
+                                      type="button"
+                                      onClick={() => startEditing(item.id, item.text)}
+                                      className={
+                                        item.done
+                                          ? projectTitleSize === "large"
+                                            ? "task-item task-item-large is-done"
+                                            : "task-item is-done"
+                                          : projectTitleSize === "large"
+                                            ? "task-item task-item-large"
+                                            : "task-item"
+                                      }
+                                    >
+                                      <span>{item.text}</span>
+                                    </button>
+                                  </div>
                                   <button
                                     type="button"
                                     onClick={() => deleteTodo(project.id, item.id)}

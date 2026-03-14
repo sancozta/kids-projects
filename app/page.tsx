@@ -11,6 +11,7 @@ import {
   Eye,
   EyeOff,
   Filter,
+  Github,
   MoonStar,
   Plus,
   SunMedium,
@@ -41,6 +42,19 @@ const themes: {
   { value: "blue", label: "Blue", icon: Waves },
 ];
 
+type PanelMode = "tasks" | "github";
+
+type GithubProject = {
+  id: number;
+  name: string;
+  owner: string;
+  description: string | null;
+  htmlUrl: string;
+  isPrivate: boolean;
+  language: string | null;
+  updatedAt: string;
+};
+
 export default function Home() {
   const initialState = createInitialDashboardState();
   const [theme, setTheme] = useState<ThemeMode>(initialState.theme);
@@ -61,6 +75,14 @@ export default function Home() {
   const [hasHydrated, setHasHydrated] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
+  const [panelMode, setPanelMode] = useState<PanelMode>("tasks");
+  const [githubProjects, setGithubProjects] = useState<GithubProject[]>([]);
+  const [isGithubLoading, setIsGithubLoading] = useState(false);
+  const [githubError, setGithubError] = useState<string | null>(null);
+  const [githubFilter, setGithubFilter] = useState("");
+  const [editingGithubProjectId, setEditingGithubProjectId] = useState<number | null>(null);
+  const [editingGithubDescription, setEditingGithubDescription] = useState("");
+  const [savingGithubProjectId, setSavingGithubProjectId] = useState<number | null>(null);
   const lastKnownUpdatedAtRef = useRef(initialState.updatedAt);
 
   useEffect(() => {
@@ -142,6 +164,10 @@ export default function Home() {
       window.removeEventListener("resize", syncViewportMode);
     };
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [panelMode]);
 
   useEffect(() => {
     if (!hasHydrated) return;
@@ -233,16 +259,96 @@ export default function Home() {
     hasHydrated,
   ]);
 
+  useEffect(() => {
+    if (panelMode !== "github") return;
+
+    let cancelled = false;
+
+    async function loadGithubProjects() {
+      if (editingGithubProjectId !== null) {
+        return;
+      }
+
+      setIsGithubLoading(true);
+      setGithubError(null);
+
+      try {
+        const response = await fetch("/api/github-projects", { cache: "no-store" });
+        const payload = (await response.json()) as {
+          ok: boolean;
+          repos?: GithubProject[];
+          error?: string;
+        };
+
+        if (!response.ok || !payload.ok || !payload.repos) {
+          throw new Error(payload.error || "Falha ao carregar os repositorios do GitHub.");
+        }
+
+        if (cancelled) return;
+
+        startTransition(() => {
+          setGithubProjects(payload.repos ?? []);
+        });
+      } catch (error) {
+        if (cancelled) return;
+        setGithubError(
+          error instanceof Error ? error.message : "Falha ao carregar os repositorios do GitHub.",
+        );
+      } finally {
+        if (!cancelled) {
+          setIsGithubLoading(false);
+        }
+      }
+    }
+
+    void loadGithubProjects();
+    const intervalId = window.setInterval(loadGithubProjects, 60000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [editingGithubProjectId, panelMode]);
+
   const visibleProjects = privacyMode ? fakeProjects : projects;
-  const totalPages = Math.max(1, Math.ceil(visibleProjects.length / 8));
+  const isGithubPanel = panelMode === "github";
+  const normalizedGithubFilter = githubFilter.trim().toLowerCase();
+  const filteredGithubProjects = githubProjects.filter((project) => {
+    if (!normalizedGithubFilter) return true;
+
+    return (
+      project.name.toLowerCase().includes(normalizedGithubFilter) ||
+      (project.description || "").toLowerCase().includes(normalizedGithubFilter)
+    );
+  });
+  const githubColumns = isCompactViewport ? 4 : 8;
+  const githubRows = isCompactViewport ? 8 : 4;
+  const githubCardsPerPage = githubColumns * githubRows;
+  const taskCardsPerPage = 8;
+  const cardsPerPage = isGithubPanel ? githubCardsPerPage : taskCardsPerPage;
+  const totalCards = isGithubPanel ? filteredGithubProjects.length : visibleProjects.length;
+  const totalPages = Math.max(1, Math.ceil(totalCards / cardsPerPage));
   const safeCurrentPage = Math.min(currentPage, totalPages - 1);
-  const paginatedProjects = visibleProjects.slice(safeCurrentPage * 8, safeCurrentPage * 8 + 8);
+  const paginatedProjects = visibleProjects.slice(
+    safeCurrentPage * taskCardsPerPage,
+    safeCurrentPage * taskCardsPerPage + taskCardsPerPage,
+  );
+  const paginatedGithubProjects = filteredGithubProjects.slice(
+    safeCurrentPage * githubCardsPerPage,
+    safeCurrentPage * githubCardsPerPage + githubCardsPerPage,
+  );
 
   const totalItems = visibleProjects.reduce((acc, project) => acc + project.items.length, 0);
   const completedItems = visibleProjects.reduce(
     (acc, project) => acc + project.items.filter((item) => item.done).length,
     0,
   );
+  const githubProjectsWithDescription = filteredGithubProjects.filter(
+    (project) => project.description,
+  ).length;
+  const githubPrivateProjects = filteredGithubProjects.filter(
+    (project) => project.isPrivate,
+  ).length;
 
   function toggleTodo(projectId: string, itemId: string) {
     setProjects((current) =>
@@ -433,6 +539,68 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
+  function startEditingGithubDescription(project: GithubProject) {
+    setEditingGithubProjectId(project.id);
+    setEditingGithubDescription(project.description ?? "");
+  }
+
+  function cancelEditingGithubDescription() {
+    setEditingGithubProjectId(null);
+    setEditingGithubDescription("");
+  }
+
+  async function saveGithubDescription(project: GithubProject) {
+    const nextDescription = editingGithubDescription.trim();
+
+    if (nextDescription.length > 200) {
+      setGithubError("A descricao deve ter no maximo 200 caracteres.");
+      return;
+    }
+
+    if ((project.description ?? "") === nextDescription) {
+      cancelEditingGithubDescription();
+      return;
+    }
+
+    setSavingGithubProjectId(project.id);
+    setGithubError(null);
+
+    try {
+      const response = await fetch("/api/github-projects", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          owner: project.owner,
+          name: project.name,
+          description: nextDescription,
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        ok: boolean;
+        error?: string;
+        repo?: GithubProject;
+      };
+
+      if (!response.ok || !payload.ok || !payload.repo) {
+        throw new Error(payload.error || "Falha ao atualizar a descricao do repositorio.");
+      }
+
+      setGithubProjects((current) =>
+        current.map((item) => (item.id === project.id ? payload.repo! : item)),
+      );
+      cancelEditingGithubDescription();
+    } catch (error) {
+      setGithubError(
+        error instanceof Error
+          ? error.message
+          : "Falha ao atualizar a descricao do repositorio.",
+      );
+    } finally {
+      setSavingGithubProjectId(null);
+    }
+  }
+
   return (
     <main className="dashboard-shell h-screen w-screen overflow-hidden p-2.5">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(72,164,255,0.18),transparent_26%),radial-gradient(circle_at_bottom_right,rgba(24,255,188,0.14),transparent_28%)]" />
@@ -449,9 +617,40 @@ export default function Home() {
           </div>
 
           <div className="header-controls">
-            <Metric label="Projetos" value={visibleProjects.length.toString().padStart(2, "0")} />
-            <Metric label="Itens" value={totalItems.toString().padStart(2, "0")} />
-            <Metric label="Done" value={completedItems.toString().padStart(2, "0")} />
+            {isGithubPanel ? (
+              <input
+                type="text"
+                value={githubFilter}
+                onChange={(event) => {
+                  setGithubFilter(event.target.value);
+                  setCurrentPage(0);
+                }}
+                placeholder="Filtrar repositorio"
+                className="github-filter-input"
+                aria-label="Filtrar repositorios por titulo ou descricao"
+              />
+            ) : null}
+
+            <Metric
+              label={isGithubPanel ? "Repos" : "Projetos"}
+              value={totalCards.toString().padStart(2, "0")}
+            />
+            <Metric
+              label={isGithubPanel ? "Descr" : "Itens"}
+              value={
+                isGithubPanel
+                  ? githubProjectsWithDescription.toString().padStart(2, "0")
+                  : totalItems.toString().padStart(2, "0")
+              }
+            />
+            <Metric
+              label={isGithubPanel ? "Priv" : "Done"}
+              value={
+                isGithubPanel
+                  ? githubPrivateProjects.toString().padStart(2, "0")
+                  : completedItems.toString().padStart(2, "0")
+              }
+            />
 
             <button
               type="button"
@@ -479,10 +678,21 @@ export default function Home() {
 
             <button
               type="button"
+              onClick={() =>
+                setPanelMode((current) => (current === "tasks" ? "github" : "tasks"))
+              }
+              className={isGithubPanel ? "theme-button active" : "theme-button"}
+              aria-label="Alternar painel de projetos do GitHub"
+            >
+              <Github className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
               onClick={createProjectCard}
               className="theme-button"
               aria-label="Criar novo card"
-              disabled={privacyMode}
+              disabled={privacyMode || isGithubPanel}
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -492,6 +702,7 @@ export default function Home() {
               onClick={exportDashboardJson}
               className="theme-button"
               aria-label="Exportar JSON do dashboard"
+              disabled={isGithubPanel}
             >
               <Download className="h-4 w-4" />
             </button>
@@ -501,6 +712,7 @@ export default function Home() {
               onClick={() => setPrivacyMode((current) => !current)}
               className={privacyMode ? "theme-button active" : "theme-button"}
               aria-label="Alternar modo com dados fake"
+              disabled={isGithubPanel}
             >
               {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
@@ -510,6 +722,7 @@ export default function Home() {
               onClick={() => setHideCompletedItems((current) => !current)}
               className={hideCompletedItems ? "theme-button active" : "theme-button"}
               aria-label="Ocultar itens concluidos"
+              disabled={isGithubPanel}
             >
               <Filter className="h-4 w-4" />
             </button>
@@ -546,20 +759,129 @@ export default function Home() {
           className="projects-grid h-[calc(100%-2.75rem-0.625rem)]"
           style={{
             gridTemplateColumns: isCompactViewport
-              ? "repeat(2, minmax(0, 1fr))"
-              : "repeat(4, minmax(0, 1fr))",
+              ? isGithubPanel
+                ? "repeat(4, minmax(0, 1fr))"
+                : "repeat(2, minmax(0, 1fr))"
+              : isGithubPanel
+                ? "repeat(8, minmax(0, 1fr))"
+                : "repeat(4, minmax(0, 1fr))",
             gridTemplateRows: isCompactViewport
-              ? "repeat(4, minmax(0, 1fr))"
-              : "repeat(2, minmax(0, 1fr))",
+              ? isGithubPanel
+                ? "repeat(8, minmax(0, 1fr))"
+                : "repeat(4, minmax(0, 1fr))"
+              : isGithubPanel
+                ? "repeat(4, minmax(0, 1fr))"
+                : "repeat(2, minmax(0, 1fr))",
           }}
         >
-          {paginatedProjects.map((project, index) => {
+          {isGithubPanel
+            ? paginatedGithubProjects.map((project, index) => {
+                const projectNumber = safeCurrentPage * githubCardsPerPage + index + 1;
+
+                return (
+                  <motion.article
+                    key={project.id}
+                    initial={{ opacity: 0, y: 24 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35, delay: index * 0.04 }}
+                    className="dashboard-panel flex min-h-0 flex-col overflow-hidden"
+                  >
+                    <div className="github-card-button">
+                      <div className="flex items-center justify-between gap-2 border-b border-[var(--border-color)] px-2.5 py-1.5">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span className="rounded-[5px] border border-[var(--border-color)] px-1 py-0.5 font-mono text-[8px] uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                            {String(projectNumber).padStart(2, "0")}
+                          </span>
+                          <div className="title-slot">
+                            <button
+                              type="button"
+                              className="title-edit-button github-title-button"
+                              onClick={() =>
+                                window.open(project.htmlUrl, "_blank", "noopener,noreferrer")
+                              }
+                            >
+                              {project.name}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="card-meta">
+                          <span className="card-counter">
+                            {savingGithubProjectId === project.id
+                              ? "Save"
+                              : project.isPrivate
+                                ? "Priv"
+                                : "Pub"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex min-h-0 flex-1 flex-col px-2.5 py-2">
+                        {editingGithubProjectId === project.id ? (
+                          <div
+                            className="github-description-editor"
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
+                          >
+                            <textarea
+                              value={editingGithubDescription}
+                              maxLength={200}
+                              autoFocus
+                              onChange={(event) =>
+                                setEditingGithubDescription(event.target.value.slice(0, 200))
+                              }
+                              onBlur={() => void saveGithubDescription(project)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" && !event.shiftKey) {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  void saveGithubDescription(project);
+                                }
+
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  cancelEditingGithubDescription();
+                                }
+                              }}
+                              className="github-description-input"
+                            />
+                            <div className="github-description-count">
+                              {editingGithubDescription.length}/200
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="github-description-button"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              startEditingGithubDescription(project);
+                            }}
+                          >
+                            <span className="github-card-description">
+                              {project.description || "Repositorio sem descricao informada."}
+                            </span>
+                          </button>
+                        )}
+                        <div className="github-card-meta-line">
+                          <span>{project.language || "Sem stack informada"}</span>
+                          <span>
+                            {new Date(project.updatedAt).toLocaleDateString("pt-BR")}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.article>
+                );
+              })
+            : paginatedProjects.map((project, index) => {
             const doneCount = project.items.filter((item) => item.done).length;
             const progress = project.items.length ? (doneCount / project.items.length) * 100 : 0;
             const visibleItems = hideCompletedItems
               ? project.items.filter((item) => !item.done)
               : project.items;
-            const projectNumber = safeCurrentPage * 8 + index + 1;
+            const projectNumber = safeCurrentPage * taskCardsPerPage + index + 1;
 
             return (
               <motion.article
@@ -810,7 +1132,15 @@ export default function Home() {
                 </div>
               </motion.article>
             );
-          })}
+              })}
+
+          {isGithubPanel && !paginatedGithubProjects.length ? (
+            <div className="dashboard-panel github-empty-state">
+              {isGithubLoading
+                ? "Carregando repositorios do GitHub..."
+                : githubError || "Nenhum repositorio encontrado no GitHub."}
+            </div>
+          ) : null}
         </div>
       </section>
     </main>

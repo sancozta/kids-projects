@@ -23,6 +23,7 @@ import {
   createInitialDashboardState,
   dashboardStorageKey,
   fakeProjects,
+  isInitialDashboardProjects,
   mergeLocalProjectSuggestions,
   parseDashboardState,
   ProjectCard,
@@ -72,10 +73,19 @@ export default function Home() {
         const fileState = response.ok
           ? parseDashboardState(JSON.stringify((await response.json()).state))
           : createInitialDashboardState();
+        const browserIsInitial = isInitialDashboardProjects(browserState.projects);
+        const fileIsInitial = isInitialDashboardProjects(fileState.projects);
+        const shouldPreferBrowserState =
+          (!browserIsInitial &&
+            fileIsInitial &&
+            new Date(browserState.updatedAt).getTime() >=
+              new Date(fileState.updatedAt).getTime()) ||
+          (!browserIsInitial &&
+            !fileIsInitial &&
+            new Date(browserState.updatedAt).getTime() >
+              new Date(fileState.updatedAt).getTime());
         const chosenState =
-          new Date(browserState.updatedAt).getTime() > new Date(fileState.updatedAt).getTime()
-            ? browserState
-            : fileState;
+          shouldPreferBrowserState ? browserState : fileState;
         const enrichedProjects = mergeLocalProjectSuggestions(chosenState.projects);
 
         if (cancelled) return;

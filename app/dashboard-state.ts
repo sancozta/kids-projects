@@ -200,15 +200,42 @@ export const fakeProjects: ProjectCard[] = [
 ];
 
 export function createInitialDashboardState(): DashboardState {
+  return createInitialDashboardStateWithTimestamp(new Date().toISOString());
+}
+
+export function createInitialDashboardStateWithTimestamp(
+  updatedAt: string,
+): DashboardState {
   return {
     version: 1,
-    updatedAt: new Date().toISOString(),
+    updatedAt,
     theme: "dark",
     projectTitleSize: "large",
     privacyMode: false,
     hideCompletedItems: false,
     projects: sanitizeProjects(initialProjects),
   };
+}
+
+export function isInitialDashboardProjects(projects: ProjectCard[]): boolean {
+  const normalizedProjects = sanitizeProjects(projects);
+
+  if (normalizedProjects.length !== initialProjects.length) {
+    return false;
+  }
+
+  return normalizedProjects.every((project, index) => {
+    const initialProject = initialProjects[index];
+
+    return (
+      project.title === initialProject.title &&
+      project.items.length === initialProject.items.length &&
+      project.items.every((item, itemIndex) => {
+        const initialItem = initialProject.items[itemIndex];
+        return item.text === initialItem.text && item.done === initialItem.done;
+      })
+    );
+  });
 }
 
 export function parseDashboardState(value: string | null): DashboardState {

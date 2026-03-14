@@ -34,6 +34,9 @@ yarn-error.log*
 .playwright-cli/
 kids-projects-dashboard.json
 data/dashboard-state.json
+data/backups/*.json
+data/*.recovered.json
+data/*.before-recovery.json
 
 # env files (can opt-in for committing if needed)
 .env*

@@ -2,22 +2,53 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
   buildDashboardState,
-  createInitialDashboardState,
+  createInitialDashboardStateWithTimestamp,
   parseDashboardState,
 } from "@/app/dashboard-state";
 
 const dataDir = path.join(process.cwd(), "data");
 const dataFile = path.join(dataDir, "dashboard-state.json");
+const backupDir = path.join(dataDir, "backups");
+const maxBackupFiles = 20;
 
 async function ensureDashboardStateFile() {
   await fs.mkdir(dataDir, { recursive: true });
+  await fs.mkdir(backupDir, { recursive: true });
 
   try {
     await fs.access(dataFile);
   } catch {
-    const initialState = createInitialDashboardState();
+    const initialState = createInitialDashboardStateWithTimestamp(
+      "1970-01-01T00:00:00.000Z",
+    );
     await fs.writeFile(dataFile, JSON.stringify(initialState, null, 2), "utf8");
   }
+}
+
+function buildBackupFileName() {
+  const stamp = new Date().toISOString().replaceAll(":", "-");
+  return path.join(backupDir, `dashboard-state.${stamp}.json`);
+}
+
+async function createDashboardBackup(raw: string) {
+  if (!raw.trim()) return;
+
+  await fs.writeFile(buildBackupFileName(), raw, "utf8");
+
+  const entries = await fs.readdir(backupDir);
+  const backupFiles = entries
+    .filter((entry) => entry.startsWith("dashboard-state.") && entry.endsWith(".json"))
+    .sort();
+
+  if (backupFiles.length <= maxBackupFiles) {
+    return;
+  }
+
+  const filesToDelete = backupFiles.slice(0, backupFiles.length - maxBackupFiles);
+
+  await Promise.all(
+    filesToDelete.map((fileName) => fs.unlink(path.join(backupDir, fileName))),
+  );
 }
 
 export async function readDashboardState() {
@@ -29,6 +60,7 @@ export async function readDashboardState() {
 
 export async function writeDashboardState(payload: unknown) {
   await ensureDashboardStateFile();
+  const currentRaw = await fs.readFile(dataFile, "utf8");
   const parsed = parseDashboardState(JSON.stringify(payload));
   const state = buildDashboardState(
     parsed.theme,
@@ -37,8 +69,13 @@ export async function writeDashboardState(payload: unknown) {
     parsed.hideCompletedItems,
     parsed.projects,
   );
+  const nextRaw = JSON.stringify(state, null, 2);
 
-  await fs.writeFile(dataFile, JSON.stringify(state, null, 2), "utf8");
+  if (currentRaw.trim() && currentRaw !== nextRaw) {
+    await createDashboardBackup(currentRaw);
+  }
+
+  await fs.writeFile(dataFile, nextRaw, "utf8");
 
   return state;
 }

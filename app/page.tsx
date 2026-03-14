@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   CheckCircle2,
@@ -61,6 +61,7 @@ export default function Home() {
   const [hasHydrated, setHasHydrated] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [isCompactViewport, setIsCompactViewport] = useState(false);
+  const lastKnownUpdatedAtRef = useRef(initialState.updatedAt);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +97,7 @@ export default function Home() {
           setPrivacyMode(chosenState.privacyMode);
           setHideCompletedItems(chosenState.hideCompletedItems);
           setProjects(enrichedProjects);
+          lastKnownUpdatedAtRef.current = chosenState.updatedAt;
           setHasHydrated(true);
         });
       } catch {
@@ -109,6 +111,7 @@ export default function Home() {
           setPrivacyMode(browserState.privacyMode);
           setHideCompletedItems(browserState.hideCompletedItems);
           setProjects(enrichedProjects);
+          lastKnownUpdatedAtRef.current = browserState.updatedAt;
           setHasHydrated(true);
         });
       }
@@ -152,6 +155,7 @@ export default function Home() {
     );
     const serializedState = JSON.stringify(state);
 
+    lastKnownUpdatedAtRef.current = state.updatedAt;
     window.localStorage.setItem(dashboardStorageKey, serializedState);
 
     const timeoutId = window.setTimeout(() => {
@@ -166,6 +170,68 @@ export default function Home() {
       window.clearTimeout(timeoutId);
     };
   }, [hasHydrated, theme, projectTitleSize, privacyMode, hideCompletedItems, projects]);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    let cancelled = false;
+
+    async function syncRemoteState() {
+      if (editingItemId || editingProjectId || creatingProjectId) {
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/dashboard-state/read", { cache: "no-store" });
+        if (!response.ok) return;
+
+        const payload = (await response.json()) as { state?: ReturnType<typeof createInitialDashboardState> };
+        if (!payload.state) return;
+
+        const remoteState = parseDashboardState(JSON.stringify(payload.state));
+        const remoteUpdatedAt = new Date(remoteState.updatedAt).getTime();
+        const localUpdatedAt = new Date(lastKnownUpdatedAtRef.current).getTime();
+
+        if (Number.isNaN(remoteUpdatedAt) || remoteUpdatedAt <= localUpdatedAt) {
+          return;
+        }
+
+        if (cancelled) return;
+
+        const enrichedProjects = mergeLocalProjectSuggestions(remoteState.projects);
+
+        startTransition(() => {
+          setTheme(remoteState.theme);
+          setProjectTitleSize(remoteState.projectTitleSize);
+          setPrivacyMode(remoteState.privacyMode);
+          setHideCompletedItems(remoteState.hideCompletedItems);
+          setProjects(enrichedProjects);
+          lastKnownUpdatedAtRef.current = remoteState.updatedAt;
+          window.localStorage.setItem(
+            dashboardStorageKey,
+            JSON.stringify({
+              ...remoteState,
+              projects: enrichedProjects,
+            }),
+          );
+        });
+      } catch {
+        return;
+      }
+    }
+
+    const intervalId = window.setInterval(syncRemoteState, 4000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    creatingProjectId,
+    editingItemId,
+    editingProjectId,
+    hasHydrated,
+  ]);
 
   const visibleProjects = privacyMode ? fakeProjects : projects;
   const totalPages = Math.max(1, Math.ceil(visibleProjects.length / 8));

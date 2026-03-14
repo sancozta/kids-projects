@@ -59,6 +59,7 @@ export default function Home() {
   const [creatingProjectId, setCreatingProjectId] = useState<string | null>(null);
   const [hasHydrated, setHasHydrated] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +114,21 @@ export default function Home() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    function syncViewportMode() {
+      setIsCompactViewport(
+        window.innerWidth <= 1200 || window.innerHeight > window.innerWidth,
+      );
+    }
+
+    syncViewportMode();
+    window.addEventListener("resize", syncViewportMode);
+
+    return () => {
+      window.removeEventListener("resize", syncViewportMode);
+    };
+  }, []);
 
   useEffect(() => {
     if (!hasHydrated) return;
@@ -450,7 +466,17 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="grid h-[calc(100%-2.75rem-0.625rem)] grid-cols-4 grid-rows-2 gap-2">
+        <div
+          className="projects-grid h-[calc(100%-2.75rem-0.625rem)]"
+          style={{
+            gridTemplateColumns: isCompactViewport
+              ? "repeat(2, minmax(0, 1fr))"
+              : "repeat(4, minmax(0, 1fr))",
+            gridTemplateRows: isCompactViewport
+              ? "repeat(4, minmax(0, 1fr))"
+              : "repeat(2, minmax(0, 1fr))",
+          }}
+        >
           {paginatedProjects.map((project, index) => {
             const doneCount = project.items.filter((item) => item.done).length;
             const progress = project.items.length ? (doneCount / project.items.length) * 100 : 0;

@@ -68,9 +68,9 @@ export default function Home() {
       const browserState = parseDashboardState(window.localStorage.getItem(dashboardStorageKey));
 
       try {
-        const response = await fetch("/api/dashboard-state", { cache: "no-store" });
+        const response = await fetch("/api/dashboard-state/read", { cache: "no-store" });
         const fileState = response.ok
-          ? parseDashboardState(JSON.stringify(await response.json()))
+          ? parseDashboardState(JSON.stringify((await response.json()).state))
           : createInitialDashboardState();
         const chosenState =
           new Date(browserState.updatedAt).getTime() > new Date(fileState.updatedAt).getTime()
@@ -145,7 +145,7 @@ export default function Home() {
     window.localStorage.setItem(dashboardStorageKey, serializedState);
 
     const timeoutId = window.setTimeout(() => {
-      void fetch("/api/dashboard-state", {
+      void fetch("/api/dashboard-state/update", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: serializedState,

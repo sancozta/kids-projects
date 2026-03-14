@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
-import { readDashboardState, writeDashboardState } from "./store";
+import { writeDashboardState } from "../store";
 
 export const dynamic = "force-dynamic";
-
-export async function GET() {
-  return NextResponse.json(await readDashboardState());
-}
 
 export async function PUT(request: Request) {
   const payload = await request.json();
   const state = await writeDashboardState(payload);
 
-  return NextResponse.json({ ok: true, state });
+  return NextResponse.json({
+    ok: true,
+    state,
+    updatedAt: state.updatedAt,
+  });
 }

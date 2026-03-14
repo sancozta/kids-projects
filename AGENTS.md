@@ -23,6 +23,22 @@
 - `app/page.tsx`: composicao da tela, dados iniciais, logica de tema e tarefas.
 - `app/globals.css`: tokens visuais, temas e classes utilitarias principais do dashboard.
 - `app/layout.tsx`: fontes, metadata e shell raiz.
+- `app/api/dashboard-state/read/route.ts`: leitura do JSON central dos projetos.
+- `app/api/dashboard-state/item/route.ts`: alteracao parcial de um item especifico.
+- `app/api/dashboard-state/update/route.ts`: atualizacao do JSON central dos projetos.
+- `app/swagger.json/route.ts`: endpoint padrao Swagger/OpenAPI em JSON.
+- `app/api/openapi/route.ts`: alias de compatibilidade para a especificacao OpenAPI.
+- `app/swagger/page.tsx`: rota visual com Swagger UI padrao para explorar a API.
+
+## API para agentes
+- `GET /api/dashboard-state/read`: retorna `{ ok, state }` com o estado completo do dashboard.
+- `PATCH /api/dashboard-state/item`: atualiza um item especifico com `projectId`, `itemId`, `text` e/ou `done`.
+- `PUT /api/dashboard-state/update`: recebe o documento inteiro do dashboard e persiste no arquivo local.
+- `GET /swagger.json`: retorna a especificacao Swagger/OpenAPI principal.
+- `GET /api/openapi`: retorna a mesma especificacao em rota de compatibilidade.
+- `GET /swagger`: interface Swagger UI padrao para consulta humana e para descoberta rapida do contrato.
+- O arquivo persistido e `data/dashboard-state.json`.
+- Agentes devem ler antes de escrever e preservar `id` de projetos e tarefas sempre que possivel.
 
 ## Regras de interface
 - Manter a grade `4 colunas x 2 linhas`.

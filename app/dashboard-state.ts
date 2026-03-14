@@ -207,7 +207,7 @@ export function createInitialDashboardState(): DashboardState {
     projectTitleSize: "large",
     privacyMode: false,
     hideCompletedItems: false,
-    projects: initialProjects,
+    projects: sanitizeProjects(initialProjects),
   };
 }
 
@@ -234,7 +234,7 @@ export function parseDashboardState(value: string | null): DashboardState {
         parsed.projectTitleSize === "normal" ? "normal" : "large",
       privacyMode: parsed.privacyMode === true,
       hideCompletedItems: parsed.hideCompletedItems === true,
-      projects: parsed.projects,
+      projects: sanitizeProjects(parsed.projects),
     };
   } catch {
     return createInitialDashboardState();
@@ -255,7 +255,7 @@ export function buildDashboardState(
     projectTitleSize,
     privacyMode,
     hideCompletedItems,
-    projects,
+    projects: sanitizeProjects(projects),
   };
 }
 
@@ -317,8 +317,47 @@ function normalizeTitle(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function slugify(value: string): string {
+  return normalizeTitle(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function sanitizeProjectItems(project: ProjectCard): ProjectCard {
+  const usedIds = new Set<string>();
+  const items = project.items.map((item, index) => {
+    const rawId = item.id?.trim() || `${project.id}-item-${index + 1}`;
+    const textSuffix = slugify(item.text) || `item-${index + 1}`;
+    let nextId = rawId;
+    let duplicateIndex = 1;
+
+    while (usedIds.has(nextId)) {
+      duplicateIndex += 1;
+      nextId = `${rawId}-${textSuffix}-${duplicateIndex}`;
+    }
+
+    usedIds.add(nextId);
+
+    return {
+      ...item,
+      id: nextId,
+    };
+  });
+
+  return {
+    ...project,
+    items,
+  };
+}
+
+function sanitizeProjects(projects: ProjectCard[]): ProjectCard[] {
+  return projects.map(sanitizeProjectItems);
+}
+
 export function mergeLocalProjectSuggestions(projects: ProjectCard[]): ProjectCard[] {
-  return projects.map((project) => {
+  return sanitizeProjects(projects).map((project) => {
     const normalizedTitle = normalizeTitle(project.title);
     const suggestion = localProjectSuggestions.find(({ match }) =>
       match.some((pattern) => normalizedTitle.includes(pattern)),
@@ -329,13 +368,27 @@ export function mergeLocalProjectSuggestions(projects: ProjectCard[]): ProjectCa
     }
 
     const existingTexts = new Set(project.items.map((item) => normalizeTitle(item.text)));
+    const existingIds = new Set(project.items.map((item) => item.id));
     const newItems = suggestion.items
       .filter((text) => !existingTexts.has(normalizeTitle(text)))
-      .map((text, index) => ({
-        id: `${project.id}-suggested-${index + 1}`,
-        text,
-        done: false,
-      }));
+      .map((text) => {
+        const baseId = `${project.id}-suggested-${slugify(text) || "item"}`;
+        let nextId = baseId;
+        let duplicateIndex = 1;
+
+        while (existingIds.has(nextId)) {
+          duplicateIndex += 1;
+          nextId = `${baseId}-${duplicateIndex}`;
+        }
+
+        existingIds.add(nextId);
+
+        return {
+          id: nextId,
+          text,
+          done: false,
+        };
+      });
 
     if (!newItems.length) {
       return project;

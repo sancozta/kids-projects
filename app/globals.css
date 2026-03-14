@@ -115,11 +115,9 @@ button {
 .dashboard-shell {
   position: relative;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 18%),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
-    linear-gradient(0deg, var(--grid-line) 1px, transparent 1px),
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.02), transparent 22%),
+    radial-gradient(circle at bottom right, rgba(82, 210, 255, 0.05), transparent 26%),
     var(--app-bg);
-  background-size: auto, calc(100% / 4) 100%, 100% calc(100% / 2), auto;
 }
 
 .dashboard-panel {
@@ -135,13 +133,15 @@ button {
 
 .metric-chip {
   display: inline-flex;
+  flex: 0 0 auto;
   min-width: 0;
-  align-items: baseline;
+  height: 24px;
+  align-items: center;
   gap: 4px;
   border: 1px solid var(--border-color);
   border-radius: 5px;
   background: var(--panel-highlight);
-  padding: 3px 6px;
+  padding: 0 7px;
 }
 
 .metric-chip span {
@@ -154,28 +154,34 @@ button {
 }
 
 .metric-chip strong {
-  font-size: 0.72rem;
+  font-size: 11px;
   font-weight: 600;
   line-height: 1;
 }
 
-.theme-switcher {
+.header-controls {
   display: flex;
-  gap: 0.15rem;
-  border: 1px solid var(--border-color);
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.04);
-  padding: 0.18rem;
+  align-items: center;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  gap: 5px;
+  min-width: 0;
 }
 
 .theme-button {
   display: inline-flex;
   align-items: center;
-  border: 0;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 24px;
+  border: 1px solid var(--border-color);
   border-radius: 5px;
-  padding: 0.32rem;
+  padding: 0;
   color: var(--text-muted);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.04);
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
   line-height: 1;
   transition:
     background-color 180ms ease,
@@ -190,6 +196,79 @@ button {
 .theme-button.active {
   background: var(--panel-highlight);
   color: var(--text-primary);
+}
+
+.theme-button:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.page-indicator {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.card-meta {
+  position: relative;
+  min-width: 52px;
+  height: 20px;
+}
+
+.card-counter,
+.card-delete {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  padding: 0 0.45rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  line-height: 1;
+  transition:
+    opacity 140ms ease,
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.card-counter {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.card-delete {
+  color: #ff8f8f;
+  background: color-mix(in srgb, #ff7d7d 10%, transparent);
+  opacity: 0;
+}
+
+.card-meta:hover .card-counter {
+  opacity: 0;
+}
+
+.card-meta:hover .card-delete {
+  opacity: 1;
+}
+
+.card-delete:disabled {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .task-input {

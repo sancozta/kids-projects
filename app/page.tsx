@@ -4,12 +4,15 @@ import { startTransition, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Circle,
   Download,
   Eye,
   EyeOff,
   Filter,
   MoonStar,
+  Plus,
   SunMedium,
   Trash2,
   Type,
@@ -55,6 +58,7 @@ export default function Home() {
   const [editingProjectTitle, setEditingProjectTitle] = useState("");
   const [creatingProjectId, setCreatingProjectId] = useState<string | null>(null);
   const [hasHydrated, setHasHydrated] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,6 +142,9 @@ export default function Home() {
   }, [hasHydrated, theme, projectTitleSize, privacyMode, hideCompletedItems, projects]);
 
   const visibleProjects = privacyMode ? fakeProjects : projects;
+  const totalPages = Math.max(1, Math.ceil(visibleProjects.length / 8));
+  const safeCurrentPage = Math.min(currentPage, totalPages - 1);
+  const paginatedProjects = visibleProjects.slice(safeCurrentPage * 8, safeCurrentPage * 8 + 8);
 
   const totalItems = visibleProjects.reduce((acc, project) => acc + project.items.length, 0);
   const completedItems = visibleProjects.reduce(
@@ -177,6 +184,18 @@ export default function Home() {
     }
   }
 
+  function deleteProjectCard(projectId: string) {
+    setProjects((current) => current.filter((project) => project.id !== projectId));
+
+    if (editingProjectId === projectId) {
+      cancelProjectEditing();
+    }
+
+    if (creatingProjectId === projectId) {
+      cancelCreatingItem(projectId);
+    }
+  }
+
   function addTodo(projectId: string) {
     const text = drafts[projectId]?.trim();
     if (!text) return;
@@ -197,6 +216,21 @@ export default function Home() {
 
     setDrafts((current) => ({ ...current, [projectId]: "" }));
     setCreatingProjectId(null);
+  }
+
+  function createProjectCard() {
+    const newProjectId = `p${Date.now()}`;
+
+    setProjects((current) => [
+      ...current,
+      {
+        id: newProjectId,
+        title: "Novo Projeto",
+        items: [],
+      },
+    ]);
+
+    setCurrentPage(totalPages);
   }
 
   function startEditing(itemId: string, text: string) {
@@ -322,10 +356,44 @@ export default function Home() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="header-controls">
             <Metric label="Projetos" value={visibleProjects.length.toString().padStart(2, "0")} />
             <Metric label="Itens" value={totalItems.toString().padStart(2, "0")} />
             <Metric label="Done" value={completedItems.toString().padStart(2, "0")} />
+
+            <button
+              type="button"
+              onClick={() => setCurrentPage((current) => Math.max(0, current - 1))}
+              className="theme-button"
+              aria-label="Pagina anterior"
+              disabled={safeCurrentPage === 0}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="page-indicator">
+              {String(safeCurrentPage + 1).padStart(2, "0")}/{String(totalPages).padStart(2, "0")}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setCurrentPage((current) => Math.min(totalPages - 1, current + 1))
+              }
+              className="theme-button"
+              aria-label="Proxima pagina"
+              disabled={safeCurrentPage >= totalPages - 1}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={createProjectCard}
+              className="theme-button"
+              aria-label="Criar novo card"
+              disabled={privacyMode}
+            >
+              <Plus className="h-4 w-4" />
+            </button>
 
             <button
               type="button"
@@ -367,30 +435,29 @@ export default function Home() {
               <Type className="h-4 w-4" />
             </button>
 
-            <div className="theme-switcher">
-              {themes.map(({ value, label, icon: Icon }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setTheme(value)}
-                  className={theme === value ? "theme-button active" : "theme-button"}
-                  aria-pressed={theme === value}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="sr-only">{label}</span>
-                </button>
-              ))}
-            </div>
+            {themes.map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setTheme(value)}
+                className={theme === value ? "theme-button active" : "theme-button"}
+                aria-pressed={theme === value}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="sr-only">{label}</span>
+              </button>
+            ))}
           </div>
         </header>
 
         <div className="grid h-[calc(100%-2.75rem-0.625rem)] grid-cols-4 grid-rows-2 gap-2">
-          {visibleProjects.map((project, index) => {
+          {paginatedProjects.map((project, index) => {
             const doneCount = project.items.filter((item) => item.done).length;
             const progress = project.items.length ? (doneCount / project.items.length) * 100 : 0;
             const visibleItems = hideCompletedItems
               ? project.items.filter((item) => !item.done)
               : project.items;
+            const projectNumber = safeCurrentPage * 8 + index + 1;
 
             return (
               <motion.article
@@ -403,7 +470,7 @@ export default function Home() {
                 <div className="flex items-center justify-between gap-2 border-b border-[var(--border-color)] px-2.5 py-1.5">
                   <div className="flex min-w-0 items-center gap-1.5">
                     <span className="rounded-[5px] border border-[var(--border-color)] px-1 py-0.5 font-mono text-[8px] uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                      {String(index + 1).padStart(2, "0")}
+                      {String(projectNumber).padStart(2, "0")}
                     </span>
                     <div className="title-slot">
                       {editingProjectId === project.id ? (
@@ -445,8 +512,19 @@ export default function Home() {
                       )}
                     </div>
                   </div>
-                  <div className="rounded-[5px] border border-[var(--border-strong)] px-2 py-0.5 font-mono text-[10px] text-[var(--text-secondary)]">
-                    {doneCount}/{project.items.length}
+                  <div className="card-meta">
+                    <span className="card-counter">
+                      {doneCount}/{project.items.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => deleteProjectCard(project.id)}
+                      className="card-delete"
+                      aria-label="Excluir card"
+                      disabled={privacyMode}
+                    >
+                      Excluir
+                    </button>
                   </div>
                 </div>
 

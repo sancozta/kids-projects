@@ -11,6 +11,7 @@ export type ProjectCard = {
   id: string;
   title: string;
   items: TodoItem[];
+  dismissedSuggestionKeys?: string[];
 };
 
 export type DashboardState = {
@@ -352,11 +353,22 @@ function slugify(value: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+export function buildSuggestionKey(value: string): string {
+  return slugify(value) || "item";
+}
+
 function sanitizeProjectItems(project: ProjectCard): ProjectCard {
   const usedIds = new Set<string>();
+  const dismissedSuggestionKeys = Array.from(
+    new Set(
+      (project.dismissedSuggestionKeys ?? [])
+        .map((value) => buildSuggestionKey(String(value)))
+        .filter(Boolean),
+    ),
+  );
   const items = project.items.map((item, index) => {
     const rawId = item.id?.trim() || `${project.id}-item-${index + 1}`;
-    const textSuffix = slugify(item.text) || `item-${index + 1}`;
+    const textSuffix = buildSuggestionKey(item.text) || `item-${index + 1}`;
     let nextId = rawId;
     let duplicateIndex = 1;
 
@@ -376,6 +388,7 @@ function sanitizeProjectItems(project: ProjectCard): ProjectCard {
   return {
     ...project,
     items,
+    dismissedSuggestionKeys,
   };
 }
 
@@ -396,10 +409,18 @@ export function mergeLocalProjectSuggestions(projects: ProjectCard[]): ProjectCa
 
     const existingTexts = new Set(project.items.map((item) => normalizeTitle(item.text)));
     const existingIds = new Set(project.items.map((item) => item.id));
+    const dismissedSuggestionKeys = new Set(project.dismissedSuggestionKeys ?? []);
     const newItems = suggestion.items
-      .filter((text) => !existingTexts.has(normalizeTitle(text)))
+      .filter((text) => {
+        const suggestionKey = buildSuggestionKey(text);
+
+        return (
+          !existingTexts.has(normalizeTitle(text)) &&
+          !dismissedSuggestionKeys.has(suggestionKey)
+        );
+      })
       .map((text) => {
-        const baseId = `${project.id}-suggested-${slugify(text) || "item"}`;
+        const baseId = `${project.id}-suggested-${buildSuggestionKey(text)}`;
         let nextId = baseId;
         let duplicateIndex = 1;
 

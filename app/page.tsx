@@ -20,6 +20,7 @@ import {
   Waves,
 } from "lucide-react";
 import {
+  buildSuggestionKey,
   buildDashboardState,
   createInitialDashboardState,
   dashboardStorageKey,
@@ -373,6 +374,20 @@ export default function Home() {
           : {
               ...project,
               items: project.items.filter((item) => item.id !== itemId),
+              dismissedSuggestionKeys: (() => {
+                const removedItem = project.items.find((item) => item.id === itemId);
+
+                if (!removedItem || !removedItem.id.startsWith(`${projectId}-suggested-`)) {
+                  return project.dismissedSuggestionKeys;
+                }
+
+                return Array.from(
+                  new Set([
+                    ...(project.dismissedSuggestionKeys ?? []),
+                    buildSuggestionKey(removedItem.text),
+                  ]),
+                );
+              })(),
             },
       ),
     );

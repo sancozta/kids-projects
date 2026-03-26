@@ -17,6 +17,7 @@ export async function PATCH(request: Request) {
       {
         ok: false,
         error: result.error,
+        state: "state" in result ? result.state : undefined,
       },
       { status: result.status },
     );

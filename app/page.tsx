@@ -85,6 +85,109 @@ export default function Home() {
   const [editingGithubDescription, setEditingGithubDescription] = useState("");
   const [savingGithubProjectId, setSavingGithubProjectId] = useState<number | null>(null);
   const lastKnownUpdatedAtRef = useRef(initialState.updatedAt);
+  const lastKnownRevisionRef = useRef(initialState.revision);
+  const latestDraftStateRef = useRef(initialState);
+  const skipNextServerPersistRef = useRef(false);
+  const isPersistingStateRef = useRef(false);
+  const hasQueuedPersistRef = useRef(false);
+
+  function applyDashboardState(
+    nextState: ReturnType<typeof createInitialDashboardState>,
+    options?: {
+      serverManaged?: boolean;
+      markHydrated?: boolean;
+    },
+  ) {
+    const enrichedProjects = mergeLocalProjectSuggestions(nextState.projects);
+    const resolvedState = {
+      ...nextState,
+      projects: enrichedProjects,
+    };
+
+    if (options?.serverManaged) {
+      skipNextServerPersistRef.current = true;
+    }
+
+    latestDraftStateRef.current = resolvedState;
+    lastKnownUpdatedAtRef.current = resolvedState.updatedAt;
+    lastKnownRevisionRef.current = resolvedState.revision;
+
+    startTransition(() => {
+      setTheme(resolvedState.theme);
+      setProjectTitleSize(resolvedState.projectTitleSize);
+      setPrivacyMode(resolvedState.privacyMode);
+      setHideCompletedItems(resolvedState.hideCompletedItems);
+      setProjects(resolvedState.projects);
+
+      if (options?.markHydrated) {
+        setHasHydrated(true);
+      }
+    });
+  }
+
+  async function persistLatestDashboardState() {
+    if (isPersistingStateRef.current) {
+      hasQueuedPersistRef.current = true;
+      return;
+    }
+
+    isPersistingStateRef.current = true;
+
+    try {
+      do {
+        hasQueuedPersistRef.current = false;
+        let attempts = 0;
+
+        while (attempts < 3) {
+          const requestState = {
+            ...latestDraftStateRef.current,
+            revision: lastKnownRevisionRef.current,
+          };
+
+          try {
+            const response = await fetch("/api/dashboard-state/update", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(requestState),
+            });
+            const payload = (await response.json()) as {
+              ok: boolean;
+              error?: string;
+              state?: ReturnType<typeof createInitialDashboardState>;
+            };
+
+            if (response.ok && payload.ok && payload.state) {
+              const savedState = parseDashboardState(JSON.stringify(payload.state));
+              latestDraftStateRef.current = savedState;
+              lastKnownUpdatedAtRef.current = savedState.updatedAt;
+              lastKnownRevisionRef.current = savedState.revision;
+              window.localStorage.setItem(
+                dashboardStorageKey,
+                JSON.stringify(savedState),
+              );
+              break;
+            }
+
+            if (response.status === 409 && payload.state) {
+              const currentServerState = parseDashboardState(
+                JSON.stringify(payload.state),
+              );
+              lastKnownUpdatedAtRef.current = currentServerState.updatedAt;
+              lastKnownRevisionRef.current = currentServerState.revision;
+              attempts += 1;
+              continue;
+            }
+
+            break;
+          } catch {
+            break;
+          }
+        }
+      } while (hasQueuedPersistRef.current);
+    } finally {
+      isPersistingStateRef.current = false;
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -99,43 +202,27 @@ export default function Home() {
           : createInitialDashboardState();
         const browserIsInitial = isInitialDashboardProjects(browserState.projects);
         const fileIsInitial = isInitialDashboardProjects(fileState.projects);
+        const browserUpdatedAt = new Date(browserState.updatedAt).getTime();
+        const fileUpdatedAt = new Date(fileState.updatedAt).getTime();
         const shouldPreferBrowserState =
           (!browserIsInitial &&
-            fileIsInitial &&
-            new Date(browserState.updatedAt).getTime() >=
-              new Date(fileState.updatedAt).getTime()) ||
-          (!browserIsInitial &&
-            !fileIsInitial &&
-            new Date(browserState.updatedAt).getTime() >
-              new Date(fileState.updatedAt).getTime());
-        const chosenState =
-          shouldPreferBrowserState ? browserState : fileState;
-        const enrichedProjects = mergeLocalProjectSuggestions(chosenState.projects);
+            fileIsInitial) ||
+          browserState.revision > fileState.revision ||
+          (browserState.revision === fileState.revision &&
+            browserUpdatedAt > fileUpdatedAt);
+        const chosenState = shouldPreferBrowserState ? browserState : fileState;
 
         if (cancelled) return;
 
-        startTransition(() => {
-          setTheme(chosenState.theme);
-          setProjectTitleSize(chosenState.projectTitleSize);
-          setPrivacyMode(chosenState.privacyMode);
-          setHideCompletedItems(chosenState.hideCompletedItems);
-          setProjects(enrichedProjects);
-          lastKnownUpdatedAtRef.current = chosenState.updatedAt;
-          setHasHydrated(true);
+        applyDashboardState(chosenState, {
+          serverManaged: !shouldPreferBrowserState,
+          markHydrated: true,
         });
       } catch {
-        const enrichedProjects = mergeLocalProjectSuggestions(browserState.projects);
-
         if (cancelled) return;
 
-        startTransition(() => {
-          setTheme(browserState.theme);
-          setProjectTitleSize(browserState.projectTitleSize);
-          setPrivacyMode(browserState.privacyMode);
-          setHideCompletedItems(browserState.hideCompletedItems);
-          setProjects(enrichedProjects);
-          lastKnownUpdatedAtRef.current = browserState.updatedAt;
-          setHasHydrated(true);
+        applyDashboardState(browserState, {
+          markHydrated: true,
         });
       }
     }
@@ -173,24 +260,30 @@ export default function Home() {
   useEffect(() => {
     if (!hasHydrated) return;
 
-    const state = buildDashboardState(
-      theme,
-      projectTitleSize,
-      privacyMode,
-      hideCompletedItems,
-      projects,
-    );
-    const serializedState = JSON.stringify(state);
+    const nextState = skipNextServerPersistRef.current
+      ? latestDraftStateRef.current
+      : buildDashboardState(
+          theme,
+          projectTitleSize,
+          privacyMode,
+          hideCompletedItems,
+          projects,
+          {
+            revision: lastKnownRevisionRef.current,
+          },
+        );
 
-    lastKnownUpdatedAtRef.current = state.updatedAt;
-    window.localStorage.setItem(dashboardStorageKey, serializedState);
+    latestDraftStateRef.current = nextState;
+    lastKnownUpdatedAtRef.current = nextState.updatedAt;
+    window.localStorage.setItem(dashboardStorageKey, JSON.stringify(nextState));
+
+    if (skipNextServerPersistRef.current) {
+      skipNextServerPersistRef.current = false;
+      return;
+    }
 
     const timeoutId = window.setTimeout(() => {
-      void fetch("/api/dashboard-state/update", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: serializedState,
-      });
+      void persistLatestDashboardState();
     }, 250);
 
     return () => {
@@ -204,7 +297,13 @@ export default function Home() {
     let cancelled = false;
 
     async function syncRemoteState() {
-      if (editingItemId || editingProjectId || creatingProjectId) {
+      if (
+        editingItemId ||
+        editingProjectId ||
+        creatingProjectId ||
+        isPersistingStateRef.current ||
+        hasQueuedPersistRef.current
+      ) {
         return;
       }
 
@@ -216,31 +315,14 @@ export default function Home() {
         if (!payload.state) return;
 
         const remoteState = parseDashboardState(JSON.stringify(payload.state));
-        const remoteUpdatedAt = new Date(remoteState.updatedAt).getTime();
-        const localUpdatedAt = new Date(lastKnownUpdatedAtRef.current).getTime();
-
-        if (Number.isNaN(remoteUpdatedAt) || remoteUpdatedAt <= localUpdatedAt) {
+        if (remoteState.revision <= lastKnownRevisionRef.current) {
           return;
         }
 
         if (cancelled) return;
 
-        const enrichedProjects = mergeLocalProjectSuggestions(remoteState.projects);
-
-        startTransition(() => {
-          setTheme(remoteState.theme);
-          setProjectTitleSize(remoteState.projectTitleSize);
-          setPrivacyMode(remoteState.privacyMode);
-          setHideCompletedItems(remoteState.hideCompletedItems);
-          setProjects(enrichedProjects);
-          lastKnownUpdatedAtRef.current = remoteState.updatedAt;
-          window.localStorage.setItem(
-            dashboardStorageKey,
-            JSON.stringify({
-              ...remoteState,
-              projects: enrichedProjects,
-            }),
-          );
+        applyDashboardState(remoteState, {
+          serverManaged: true,
         });
       } catch {
         return;

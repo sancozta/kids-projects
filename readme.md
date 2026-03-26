@@ -31,20 +31,24 @@ Funcionalidades atuais:
 - cards de projeto com titulo editavel
 - tarefas editaveis com conclusao por bolinha dedicada
 - criacao inline de novos itens dentro do card
-- persistencia local em JSON versionado
+- persistencia local em SQLite com revisao de servidor
 - exportacao manual do estado atual
 - temas `light`, `dark` e `blue`
 - opcao de aumentar a fonte dos titulos dos projetos
+- healthcheck em `/api/health`
+- templates de `launchd`, watchdog e backup agendado de `data/`
+- CLI local `kids` para operacao, backup, health e leitura do estado
 
 ### Estrutura dos Dados
 
-O estado do painel e salvo de forma estruturada, o que facilita backup, importacao futura e sincronizacao com servicos externos.
+O estado do painel e salvo de forma estruturada em SQLite local, com snapshots JSON incrementais para backup e recuperacao.
 
 Exemplo:
 
 ```json
 {
   "version": 1,
+  "revision": 4,
   "updatedAt": "2026-03-13T19:42:14.401Z",
   "theme": "dark",
   "projectTitleSize": "normal",
@@ -84,31 +88,99 @@ npm install
 Suba o projeto em desenvolvimento:
 
 ```bash
-npm run dev -- --port 3002
+npm run dev -- --port 46321
 ```
 
 Abra no navegador:
 
 ```text
-http://localhost:3002
+http://localhost:46321
 ```
 
 ### Scripts
 
 ```bash
+npm run cli -- help
 npm run dev
 npm run build
 npm run start
+npm run start:prod
 npm run lint
+npm run rebuild:native
+npm run healthcheck
+npm run backup:data
+npm run install:launchd
+npm run uninstall:launchd
 ```
+
+### CLI
+
+O projeto agora inclui uma CLI inspirada na estrutura do `mark-cli`, mas orientada ao dominio do `kids-projects`.
+
+Uso direto:
+
+```bash
+./cli/kids.sh help
+npm run cli -- help
+```
+
+Para instalar o comando `kids` com autocomplete no zsh:
+
+```bash
+source ./cli/install.sh
+```
+
+Comandos iniciais:
+
+- `kids serve`
+- `kids health`
+- `kids state --summary`
+- `kids backup`
+- `kids install launchd`
+- `kids uninstall launchd`
+
+Se a versao do Node mudar entre instalacoes, o projeto tenta recompilar `better-sqlite3` automaticamente antes de subir o servidor ou rodar comandos Node da CLI. Se quiser forcar manualmente:
+
+```bash
+npm run rebuild:native
+```
+
+Se voce alterar a porta padrao ou trocar o Node usado pelo projeto, reinstale os agentes do `launchd` para atualizar os binarios e variaveis persistidas:
+
+```bash
+kids uninstall launchd
+kids install launchd
+```
+
+Convencoes da CLI:
+
+- comandos em `cli/commands/`
+- suporte a `.sh`, `.mjs` e `.js`
+- `# desc:` ou `// desc:` para help automatico
+- prefixo `_` para comandos privados
+- prefixo `util_` para arquivos utilitarios invisiveis no help
 
 ### Organizacao do Codigo
 
 - `app/page.tsx`: tela principal, interacoes e fluxo do dashboard
 - `app/dashboard-state.ts`: tipos, estado inicial, parse e persistencia estruturada
+- `app/api/dashboard-state/store.ts`: store SQLite, migracao do JSON legado, revisoes e backups
+- `app/api/health/route.ts`: healthcheck de leitura e escrita do store
 - `app/globals.css`: tokens visuais, temas e classes do painel
 - `app/layout.tsx`: shell raiz, metadata e fonts
+- `cli/`: CLI local do projeto, catalogo de comandos e guia para agentes
+- `launchd/`: templates de agentes para boot, watchdog e backup
+- `scripts/`: start local de producao, watchdog, backup e instalacao do launchd
 - `AGENTS.md`: contexto de projeto para agentes e IAs
+
+### Operacao Local
+
+- Store principal: `data/dashboard-state.sqlite`
+- Backups incrementais: `data/backups/*.json`
+- Backups agendados do diretório `data/`: `data/archives/*.tar.gz`
+- Healthcheck: `GET /api/health`
+- Instalação de agentes `launchd`: `npm run install:launchd`
+- `kids health` faz fallback para diagnostico local do store quando o HTTP nao responde e aponta divergencias de porta do `launchd`
 
 ### Posicionamento
 

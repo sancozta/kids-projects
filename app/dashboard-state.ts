@@ -16,6 +16,7 @@ export type ProjectCard = {
 
 export type DashboardState = {
   version: 1;
+  revision: number;
   updatedAt: string;
   theme: ThemeMode;
   projectTitleSize: ProjectTitleSize;
@@ -206,9 +207,11 @@ export function createInitialDashboardState(): DashboardState {
 
 export function createInitialDashboardStateWithTimestamp(
   updatedAt: string,
+  revision = 0,
 ): DashboardState {
   return {
     version: 1,
+    revision,
     updatedAt,
     theme: "dark",
     projectTitleSize: "large",
@@ -240,33 +243,9 @@ export function isInitialDashboardProjects(projects: ProjectCard[]): boolean {
 }
 
 export function parseDashboardState(value: string | null): DashboardState {
-  if (!value) return createInitialDashboardState();
+  const parsed = tryParseDashboardState(value);
 
-  try {
-    const parsed = JSON.parse(value) as Partial<DashboardState>;
-
-    if (
-      parsed.version !== 1 ||
-      typeof parsed.updatedAt !== "string" ||
-      !Array.isArray(parsed.projects) ||
-      (parsed.theme !== "light" && parsed.theme !== "dark" && parsed.theme !== "blue")
-    ) {
-      return createInitialDashboardState();
-    }
-
-    return {
-      version: 1,
-      updatedAt: parsed.updatedAt,
-      theme: parsed.theme,
-      projectTitleSize:
-        parsed.projectTitleSize === "normal" ? "normal" : "large",
-      privacyMode: parsed.privacyMode === true,
-      hideCompletedItems: parsed.hideCompletedItems === true,
-      projects: sanitizeProjects(parsed.projects),
-    };
-  } catch {
-    return createInitialDashboardState();
-  }
+  return parsed ?? createInitialDashboardState();
 }
 
 export function buildDashboardState(
@@ -275,10 +254,15 @@ export function buildDashboardState(
   privacyMode: boolean,
   hideCompletedItems: boolean,
   projects: ProjectCard[],
+  options?: {
+    revision?: number;
+    updatedAt?: string;
+  },
 ): DashboardState {
   return {
     version: 1,
-    updatedAt: new Date().toISOString(),
+    revision: options?.revision ?? 0,
+    updatedAt: options?.updatedAt ?? new Date().toISOString(),
     theme,
     projectTitleSize,
     privacyMode,
@@ -357,6 +341,102 @@ export function buildSuggestionKey(value: string): string {
   return slugify(value) || "item";
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+export function parseDashboardStatePayload(value: unknown): DashboardState | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    value.version !== 1 ||
+    typeof value.updatedAt !== "string" ||
+    !Array.isArray(value.projects) ||
+    (value.theme !== "light" && value.theme !== "dark" && value.theme !== "blue")
+  ) {
+    return null;
+  }
+
+  return {
+    version: 1,
+    revision:
+      typeof value.revision === "number" &&
+      Number.isFinite(value.revision) &&
+      value.revision >= 0
+        ? Math.trunc(value.revision)
+        : 0,
+    updatedAt: value.updatedAt,
+    theme: value.theme,
+    projectTitleSize: value.projectTitleSize === "normal" ? "normal" : "large",
+    privacyMode: value.privacyMode === true,
+    hideCompletedItems: value.hideCompletedItems === true,
+    projects: sanitizeProjects(value.projects),
+  };
+}
+
+export function tryParseDashboardState(value: string | null): DashboardState | null {
+  if (!value) return null;
+
+  try {
+    return parseDashboardStatePayload(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeTodoItem(item: unknown, projectId: string, index: number): TodoItem {
+  if (!isRecord(item)) {
+    return {
+      id: `${projectId}-item-${index + 1}`,
+      text: `Item ${index + 1}`,
+      done: false,
+    };
+  }
+
+  const text =
+    typeof item.text === "string" && item.text.trim()
+      ? item.text.trim()
+      : `Item ${index + 1}`;
+
+  return {
+    id:
+      typeof item.id === "string" && item.id.trim()
+        ? item.id.trim()
+        : `${projectId}-item-${index + 1}`,
+    text,
+    done: item.done === true,
+  };
+}
+
+function sanitizeProjectCard(project: unknown, index: number): ProjectCard | null {
+  if (!isRecord(project)) {
+    return null;
+  }
+
+  const fallbackId = `p${index + 1}`;
+  const id =
+    typeof project.id === "string" && project.id.trim()
+      ? project.id.trim()
+      : fallbackId;
+  const title =
+    typeof project.title === "string" && project.title.trim()
+      ? project.title.trim()
+      : `Projeto ${index + 1}`;
+  const itemsSource = Array.isArray(project.items) ? project.items : [];
+  const dismissedSuggestionKeys = Array.isArray(project.dismissedSuggestionKeys)
+    ? project.dismissedSuggestionKeys.map((value) => String(value))
+    : [];
+
+  return sanitizeProjectItems({
+    id,
+    title,
+    items: itemsSource.map((item, itemIndex) => sanitizeTodoItem(item, id, itemIndex)),
+    dismissedSuggestionKeys,
+  });
+}
+
 function sanitizeProjectItems(project: ProjectCard): ProjectCard {
   const usedIds = new Set<string>();
   const dismissedSuggestionKeys = Array.from(
@@ -382,18 +462,23 @@ function sanitizeProjectItems(project: ProjectCard): ProjectCard {
     return {
       ...item,
       id: nextId,
+      text: item.text.trim() || `Item ${index + 1}`,
+      done: item.done === true,
     };
   });
 
   return {
     ...project,
+    title: project.title.trim() || "Projeto",
     items,
     dismissedSuggestionKeys,
   };
 }
 
-function sanitizeProjects(projects: ProjectCard[]): ProjectCard[] {
-  return projects.map(sanitizeProjectItems);
+function sanitizeProjects(projects: unknown[]): ProjectCard[] {
+  return projects
+    .map(sanitizeProjectCard)
+    .filter((project): project is ProjectCard => project !== null);
 }
 
 export function mergeLocalProjectSuggestions(projects: ProjectCard[]): ProjectCard[] {

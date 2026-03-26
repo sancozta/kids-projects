@@ -5,11 +5,22 @@ export const dynamic = "force-dynamic";
 
 export async function PUT(request: Request) {
   const payload = await request.json();
-  const state = await writeDashboardState(payload);
+  const result = await writeDashboardState(payload);
+
+  if (!result.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: result.error,
+        state: result.state,
+      },
+      { status: result.status },
+    );
+  }
 
   return NextResponse.json({
     ok: true,
-    state,
-    updatedAt: state.updatedAt,
+    state: result.state,
+    updatedAt: result.state.updatedAt,
   });
 }

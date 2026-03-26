@@ -9,7 +9,18 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   const payload = await request.json();
-  const state = await writeDashboardState(payload);
+  const result = await writeDashboardState(payload);
 
-  return NextResponse.json({ ok: true, state });
+  if (!result.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: result.error,
+        state: result.state,
+      },
+      { status: result.status },
+    );
+  }
+
+  return NextResponse.json({ ok: true, state: result.state });
 }

@@ -1,5 +1,6 @@
 const dashboardStateExample = {
   version: 1,
+  revision: 4,
   updatedAt: "2026-03-13T15:00:00.000Z",
   theme: "dark",
   projectTitleSize: "large",
@@ -35,7 +36,7 @@ export const openApiDocument = {
 Esta API existe para transformar o dashboard em uma fonte central de verdade para projetos e tarefas.
 
 Objetivo do produto:
-- centralizar o status operacional dos projetos em um unico JSON
+- centralizar o status operacional dos projetos em um unico documento persistido localmente
 - permitir que pessoas e agentes de IA consultem o estado atual
 - permitir que agentes atualizem tarefas, titulos e status de conclusao com persistencia local
 
@@ -48,17 +49,19 @@ Guia operacional para agentes:
 6. Para alterar somente um item, prefira a rota operacional \`PATCH /api/dashboard-state/item\`.
 
 Fonte persistida:
-- arquivo local \`data/dashboard-state.json\`
+- SQLite local em \`data/dashboard-state.sqlite\`
+- backups JSON incrementais em \`data/backups/\`
 
 Contrato principal:
 - leitura via \`GET /api/dashboard-state/read\`
 - atualizacao via \`PUT /api/dashboard-state/update\`
 - atualizacao pontual de item via \`PATCH /api/dashboard-state/item\`
+- healthcheck via \`GET /api/health\`
     `.trim(),
   },
   servers: [
     {
-      url: "http://localhost:3002",
+      url: "http://localhost:46321",
       description: "Servidor local de desenvolvimento do dashboard",
     },
   ],
@@ -72,6 +75,11 @@ Contrato principal:
       name: "OpenAPI",
       description:
         "Descoberta da especificacao da API para humanos e agentes de IA.",
+    },
+    {
+      name: "Health",
+      description:
+        "Verificacao operacional do store local e do estado geral da API.",
     },
   ],
   paths: {
@@ -95,6 +103,7 @@ Como agentes devem interpretar o JSON retornado em \`state\`:
 - \`id\` de projeto e de item devem ser tratados como identidades estaveis, nao como labels editaveis
 - \`title\` e \`text\` sao os campos semanticos que podem ser reescritos
 - \`updatedAt\` representa o timestamp mais recente conhecido do documento inteiro
+- \`revision\` representa a revisao canonica do servidor e deve ser reenviada no PUT seguinte
 
 Fluxo recomendado para agentes:
 1. Leia \`state\`
@@ -223,6 +232,23 @@ Exemplos de uso:
               },
             },
           },
+          "400": {
+            description: "Payload invalido.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "409": {
+            description:
+              "Conflito de revisao. O cliente deve reler o estado atual antes de tentar salvar novamente.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ConflictResponse" },
+              },
+            },
+          },
         },
       },
     },
@@ -322,6 +348,36 @@ Campos obrigatorios para localizar o item:
         },
       },
     },
+    "/api/health": {
+      get: {
+        tags: ["Health"],
+        operationId: "readDashboardHealth",
+        summary: "Executar healthcheck operacional do dashboard",
+        description: `
+Valida o store local, executa uma leitura do estado persistido e grava um heartbeat operacional no SQLite.
+
+Use esta rota para watchdogs, launchd e monitoramento local.
+        `.trim(),
+        responses: {
+          "200": {
+            description: "Store saudavel para leitura e escrita.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/HealthResponse" },
+              },
+            },
+          },
+          "503": {
+            description: "Falha no healthcheck do store local.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/HealthResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
     "/swagger.json": {
       get: {
         tags: ["OpenAPI"],
@@ -403,6 +459,7 @@ Campos obrigatorios para localizar o item:
         additionalProperties: false,
         required: [
           "version",
+          "revision",
           "updatedAt",
           "theme",
           "projectTitleSize",
@@ -417,6 +474,12 @@ Campos obrigatorios para localizar o item:
             type: "integer",
             const: 1,
             description: "Versao atual do contrato do documento.",
+          },
+          revision: {
+            type: "integer",
+            minimum: 0,
+            description:
+              "Revisao canonica emitida pelo servidor. Deve ser reenviada em updates completos para evitar conflito de escrita.",
           },
           updatedAt: {
             type: "string",
@@ -471,6 +534,65 @@ Campos obrigatorios para localizar o item:
           },
         },
       },
+      HealthResponse: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "ok",
+          "store",
+          "databasePath",
+          "backupDir",
+          "canRead",
+          "canWrite",
+          "integrity",
+          "stateRevision",
+          "stateUpdatedAt",
+          "lastBackupPath",
+          "lastBackupAt",
+        ],
+        properties: {
+          ok: {
+            type: "boolean",
+          },
+          store: {
+            type: "string",
+            const: "sqlite",
+          },
+          databasePath: {
+            type: "string",
+          },
+          backupDir: {
+            type: "string",
+          },
+          canRead: {
+            type: "boolean",
+          },
+          canWrite: {
+            type: "boolean",
+          },
+          integrity: {
+            type: "string",
+            description: "Resultado do PRAGMA quick_check do SQLite.",
+          },
+          stateRevision: {
+            type: ["integer", "null"],
+          },
+          stateUpdatedAt: {
+            type: ["string", "null"],
+            format: "date-time",
+          },
+          lastBackupPath: {
+            type: ["string", "null"],
+          },
+          lastBackupAt: {
+            type: ["string", "null"],
+            format: "date-time",
+          },
+          error: {
+            type: "string",
+          },
+        },
+      },
       PatchDashboardItemRequest: {
         type: "object",
         additionalProperties: false,
@@ -510,6 +632,23 @@ Campos obrigatorios para localizar o item:
           error: {
             type: "string",
             description: "Mensagem objetiva para orientar o agente ou cliente.",
+          },
+        },
+      },
+      ConflictResponse: {
+        type: "object",
+        additionalProperties: false,
+        required: ["ok", "error", "state"],
+        properties: {
+          ok: {
+            type: "boolean",
+            const: false,
+          },
+          error: {
+            type: "string",
+          },
+          state: {
+            $ref: "#/components/schemas/DashboardState",
           },
         },
       },

@@ -23,6 +23,40 @@ install_template() {
     "$source_file" > "$target_file"
 }
 
+wait_until_unloaded() {
+  local label="$1"
+  local attempt
+
+  for attempt in 1 2 3 4 5; do
+    if ! launchctl print "gui/${UID}/${label}" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    sleep 0.5
+  done
+}
+
+bootstrap_agent() {
+  local plist_path="$1"
+  local attempt
+  local error_file
+
+  error_file="$(mktemp)"
+
+  for attempt in 1 2 3 4 5; do
+    if launchctl bootstrap "gui/${UID}" "$plist_path" 2>"$error_file"; then
+      rm -f "$error_file"
+      return 0
+    fi
+
+    sleep 0.5
+  done
+
+  cat "$error_file" >&2
+  rm -f "$error_file"
+  return 1
+}
+
 install_template "com.sancozta.kids-projects.plist.template"
 install_template "com.sancozta.kids-projects.watchdog.plist.template"
 install_template "com.sancozta.kids-projects.backup.plist.template"
@@ -33,11 +67,12 @@ for label in \
   "com.sancozta.kids-projects.backup"
 do
   launchctl bootout "gui/${UID}/${label}" 2>/dev/null || true
+  wait_until_unloaded "$label"
 done
 
-launchctl bootstrap "gui/${UID}" "$TARGET_DIR/com.sancozta.kids-projects.plist"
-launchctl bootstrap "gui/${UID}" "$TARGET_DIR/com.sancozta.kids-projects.watchdog.plist"
-launchctl bootstrap "gui/${UID}" "$TARGET_DIR/com.sancozta.kids-projects.backup.plist"
+bootstrap_agent "$TARGET_DIR/com.sancozta.kids-projects.plist"
+bootstrap_agent "$TARGET_DIR/com.sancozta.kids-projects.watchdog.plist"
+bootstrap_agent "$TARGET_DIR/com.sancozta.kids-projects.backup.plist"
 
 launchctl enable "gui/${UID}/com.sancozta.kids-projects"
 launchctl enable "gui/${UID}/com.sancozta.kids-projects.watchdog"

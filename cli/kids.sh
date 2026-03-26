@@ -153,7 +153,7 @@ run_command() {
 
   case "$file" in
     *.sh)
-      exec "$file" "$@"
+      exec bash "$file" "$@"
       ;;
     *.mjs|*.js)
       bash "$CLI_DIR/../scripts/ensure-native-deps.sh"
